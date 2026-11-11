@@ -4,13 +4,38 @@ Honest status as of 12 Nov 2026. Everything below was found by running the app o
 74 posts from one fest's Instagram page (Mar–Nov 2026) and 9 drafts of one talk poster that the design
 team rejected, plus 2 posters the team accepted.
 
-**Short version:** the pipeline, API, plugins and dashboards work end to end. Model v4 ranks the team's real
-new posts above its rejected drafts (AUC 0.90 on posts it had not seen) and the 2 accepted one-offs above most
-rejects (AUC 0.83, was 0.53). It still cannot *confidently* say "approved": everything real lands in the wide
-"Borderline" band, all rejected drafts come from one brief, and only 2 accepted designs are on record.
+**Short version:** the pipeline, API, plugins and dashboards work end to end. Model v5 ranks the team's real
+new posts above its rejected drafts (AUC 0.90 on posts it had not seen) and both accepted one-offs above all 9
+rejects (was AUC 0.53 in v2). It is still tested on very little: all rejected drafts come from one brief and only
+2 accepted designs are on record.
 More decided designs (see "Improvements") are what would move it further.
 
-## 00. Model v4 (12 Nov 2026): a better test, then a better scorer
+## 000. Model v5 (12 Nov 2026): CLIP now sees the whole poster
+
+CLIP's standard preprocessing resizes the short side to 224 px and **centre-crops**, so a 4:5 poster lost ~10 %
+at the top and bottom, where titles, dates and logos usually are. v5 pads each image to a square with its own edge
+colour first (`features.pad_square`, `VIBE_CLIP_FRAMING=pad`). Stored vectors carry `clip_ver` and are
+re-embedded automatically on the next retrain.
+
+Tested with `scripts/embed_variants.py` + `scripts/evaluate.py` (v4 scorer, only the image embedding changed):
+
+| Embedding | A: time-forward AUC (95 % CI) | B: series-out AUC | Rejects caught at 10 % false alarms (A / B) |
+|---|---|---|---|
+| ViT-B-32, centre crop (v4) | 0.90 (0.76-0.93) | 0.96 | 42 % / 78 % |
+| **ViT-B-32, padded (v5)** | **0.90 (0.82-0.95)** | **0.95** | **64 % / 78 %** |
+| ViT-B-32, mean of 3 square crops | 0.94 (0.83-0.96) | 0.97 | 67 % / 100 % (3x slower, accepted posters lower) |
+| ViT-B-16, padded | 0.86 | 0.93 | 43 % / 78 % |
+| ViT-L-14, padded (3x the size) | 0.79 | 0.90 | 50 % / 56 % |
+
+**Bigger models are worse** here, like DINOv2: they focus on *what* is in a poster, not its style. Recency
+weighting (compare only with the last 30/50 posts) and k = 5-15 were within noise.
+
+**Labelled designs, v4 → v5:** accepted Pandiya 20 → **46 (On-brand)**, accepted WEALTH CODE 11 → **23** (Borderline,
+just under the 25 line); the highest-scoring reject is 15.5, so **both accepted designs now score above all 9 rejects**
+(AUC 0.83 → 1.0; same-brief pairs 6/9 → 9/9). 5 of 9 rejects are now Off-brand (v4: 0), none On-brand. Only 11
+labelled designs from 2 briefs, and padding was chosen after seeing them, so treat this as encouraging, not proven.
+
+ (12 Nov 2026): a better test, then a better scorer
 
 **New evaluation, `scripts/evaluate.py`.** Two accepted designs are too few to judge anything, but every post the
 team published later *is* an approved new design. So:

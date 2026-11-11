@@ -7,9 +7,9 @@ and the team's closest past posts.
 FDE1 course project (IIT Kanpur, 2026-27).
 
 > **Status:** the pipeline, API, plugin system and dashboards work end to end. It scores plans *and* finished
-> designs. Model v4 ranks the team's real new posts above its rejected drafts (AUC 0.90 on posts it had not seen,
-> `scripts/evaluate.py`) and accepted above rejected designs at AUC 0.83 (2 accepted, 9 rejected: small). It can't yet
-> say "approved" with confidence; the approval model switches itself on once enough decided designs are recorded.
+> designs. Model v5 ranks the team's real new posts above its rejected drafts (AUC 0.90 on posts it had not seen,
+> `scripts/evaluate.py`) and both accepted designs above all 9 rejected drafts (only 2 accepted, 9 rejected, 2 briefs:
+> encouraging, not proven). The approval model switches itself on once enough decided designs are recorded.
 > See [KNOWN_ISSUES.md](KNOWN_ISSUES.md) for everything that fails, the evidence, and what to improve.
 
 ## Two checks
@@ -58,7 +58,7 @@ Every import computes features, makes near-miss images and retrains. A scheduler
 | Component | Where | What |
 |---|---|---|
 | Data (ETL) | `backend/vibe/importers.py`, `pipeline.py` | Instaloader / folders / uploads → images + likes + dates → SQLite (`data/vibecheck.db`) |
-| Features | `features.py` | CLIP ViT-B/32 embedding (512 numbers) + 8 readable style features (brightness, saturation, warmth, text amount, busyness, empty space, contrast, illustration) + 5-colour palette |
+| Features | `features.py` | CLIP ViT-B/32 embedding of the whole poster (padded to a square, not centre-cropped; 512 numbers) + 8 readable style features (brightness, saturation, warmth, text amount, busyness, empty space, contrast, illustration) + 5-colour palette |
 | Adaptive | `model.py`, `augment.py`, `finish.py` | Approval model trained on designs the seniors decided on (leave-one-project-out validated, switches on at 8 accepted + 8 rejected from 3 projects); finish checks from text detection (EasyOCR), calibrated on team posts; on-brand score: percentile among the team's own posts from CLIP look (near-twins ignored) + colour match against same-topic past posts; a logistic regression (team vs other pages + near-misses) is blended in once ≥ 20 other-page posts exist; text scored against 40 reference descriptions; LAION aesthetic "audience appeal"; ridge regression for likes (model chosen by cross-validation); UMAP style map. Retrains on every import and daily. |
 | Visualization | `frontend/src/pages` | Result (gauge, reasons, feature strips, palettes, nearest posts), Team style (model health, style map, palette, ranges, trend, what gets likes) |
 | App | `frontend/` (React + Vite + Recharts) | Check my idea, Result, History (record seniors' decisions), Team setup, Plugins |
@@ -82,6 +82,7 @@ Example: `plugins/contrast_checker/app.py` (run on port 8100).
 ```bash
 .venv/Scripts/python scripts/evaluate.py          # add --dino to also test DINOv2
 ```
+`scripts/embed_variants.py` re-embeds the posts with other CLIP set-ups (framing, B-16, L-14) to compare.
 Scores every month's posts with a model that only knew older posts, and every series with a model built from the
 other series, against the rejected drafts. Use it before changing the scorer.
 
