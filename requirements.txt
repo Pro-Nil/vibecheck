@@ -1,0 +1,19 @@
+# CPU-only torch keeps the download small:
+#   pip install torch torchvision --index-url https://download.pytorch.org/whl/cpu
+torch
+torchvision
+open_clip_torch
+fastapi
+uvicorn[standard]
+python-multipart
+sqlalchemy
+scikit-learn
+opencv-python-headless
+pillow
+numpy
+umap-learn
+instaloader
+apscheduler
+httpx
+joblib
+pytest
