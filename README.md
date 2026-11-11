@@ -7,7 +7,7 @@ and the team's closest past posts.
 FDE1 course project (IIT Kanpur, 2026-27).
 
 > **Status:** the pipeline, API, plugin system and dashboards work end to end. It scores plans *and* finished
-> designs. Model v5 ranks the team's real new posts above its rejected drafts (AUC 0.90 on posts it had not seen,
+> designs. Model v6 ranks the team's real new posts above its rejected drafts (AUC 0.90 on posts it had not seen,
 > `scripts/evaluate.py`) and both accepted designs above all 9 rejected drafts (only 2 accepted, 9 rejected, 2 briefs:
 > encouraging, not proven). The approval model switches itself on once enough decided designs are recorded.
 > See [KNOWN_ISSUES.md](KNOWN_ISSUES.md) for everything that fails, the evidence, and what to improve.
@@ -83,6 +83,9 @@ Example: `plugins/contrast_checker/app.py` (run on port 8100).
 .venv/Scripts/python scripts/evaluate.py          # add --dino to also test DINOv2
 ```
 `scripts/embed_variants.py` re-embeds the posts with other CLIP set-ups (framing, B-16, L-14) to compare.
+`scripts/synth_benchmark.py` checks which realistic mistakes (wrong colours, clutter, cut-off title...) lower the score
+and that harmless edits (mirror, JPEG) don't. `scripts/simulate_seniors.py` estimates how many decided designs the
+approval model needs (roughly 30-50 briefs).
 Scores every month's posts with a model that only knew older posts, and every series with a model built from the
 other series, against the rejected drafts. Use it before changing the scorer.
 

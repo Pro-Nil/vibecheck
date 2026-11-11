@@ -4,13 +4,55 @@ Honest status as of 12 Nov 2026. Everything below was found by running the app o
 74 posts from one fest's Instagram page (Mar–Nov 2026) and 9 drafts of one talk poster that the design
 team rejected, plus 2 posters the team accepted.
 
-**Short version:** the pipeline, API, plugins and dashboards work end to end. Model v5 ranks the team's real
+**Short version:** the pipeline, API, plugins and dashboards work end to end. Model v6 (v5 + style match) ranks the team's real
 new posts above its rejected drafts (AUC 0.90 on posts it had not seen) and both accepted one-offs above all 9
 rejects (was AUC 0.53 in v2). It is still tested on very little: all rejected drafts come from one brief and only
 2 accepted designs are on record.
 More decided designs (see "Improvements") are what would move it further.
 
-## 000. Model v5 (12 Nov 2026): CLIP now sees the whole poster
+## 0000. Model v6 (12 Nov 2026): synthetic data used to test, not to train
+
+Made-up data cannot teach the seniors' taste (train and test on my own fakes and the score means nothing), so it
+was used two ways, each guarded by the real time-forward evaluation:
+
+**1. Mistake benchmark (`scripts/synth_benchmark.py`).** Each of the 75 real team posts is held out with its series
+and scored as-is, after 10 realistic mistakes and after 5 harmless edits. Finding: v5 hardly noticed most mistakes.
+A wrong colour scheme changed the verdict in only 29 % of posts, while harmless edits (mirror, 4 % crop) changed it
+in 13-15 %. Clutter lowered the score in 41 % of posts, *less* often than mirroring did (57 %).
+
+**Fix (v6): style match.** A third on-brand signal compares the six measured style features (brightness, saturation,
+warmth, busyness, empty space, contrast; standardised by the team's spread) with the same-topic past posts.
+
+| Verdict changed by the edit (higher is better for mistakes, lower for harmless) | v5 | v6 |
+|---|---|---|
+| wrong colour scheme | 29 % | **57 %** (median score 30 → 14) |
+| busy texture / low contrast (scored lower) | 63 % / 67 % | **75 % / 73 %** |
+| clutter, washed out | 16 %, 16 % | 12 %, 13 % (within this team's normal range: Techkriti posts run from plain to very busy) |
+| harmless: JPEG / 4 % crop / brighter | 11 % / 13 % / 7 % | **7 % / 7 % / 5 %** |
+
+Real-data guardrail: time-forward AUC 0.90 (0.79-0.94), series-out 0.93 (v5: 0.95), both within noise. On the
+labelled designs both accepted posters are now On-brand (Pandiya 51, WEALTH CODE 25) and above all 9 rejects
+(highest 21); 5 of 9 rejects Off-brand, 1 On-brand.
+
+**2. Simulated seniors (`scripts/simulate_seniors.py`).** Each simulated brief = 1 accepted real post + 2 rejected
+versions with a mistake; 15 % of decisions flipped (inconsistent seniors). The approval model, validated leaving one
+brief out:
+
+| Briefs (designs) | Approval model AUC | On-brand AUC | Same-brief pairs right (approval / on-brand) |
+|---|---|---|---|
+| 5 (15) | 0.69 ± 0.14 | 0.61 | 0.74 / 0.67 |
+| 12 (36) | 0.62 ± 0.08 | 0.58 | 0.71 / 0.66 |
+| 30 (90) | 0.63 ± 0.08 | 0.56 | 0.71 / 0.68 |
+| 50 (150) | 0.67 ± 0.03 | 0.57 | 0.73 / 0.70 |
+
+So **expect to need roughly 30-50 decided briefs** before a learned approval model reliably beats the on-brand score,
+and even then the gain is modest. Richer inputs (signed style z-scores) and centring within each brief did not help.
+The old switch-on rule (AUC >= 0.60 at 8+8 designs, 3 briefs) would often switch on a model that was just lucky (its
+estimate swings +/-0.15 at that size), so it now also requires the low end of a bootstrap 90 % interval to be above
+0.5 and no loss against the on-brand score. In simulation it then switches on 0-33 % of the time below 20 briefs,
+67 % at 30, 100 % at 50. The simulated seniors reject exactly the mistakes we invented, so real numbers will be worse.
+
+ (12 Nov 2026): CLIP now sees the whole poster
 
 CLIP's standard preprocessing resizes the short side to 224 px and **centre-crops**, so a 4:5 poster lost ~10 %
 at the top and bottom, where titles, dates and logos usually are. v5 pads each image to a square with its own edge
