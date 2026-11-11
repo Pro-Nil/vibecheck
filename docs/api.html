@@ -83,48 +83,52 @@ components on the Result page (or the Team style page). You do not build a separ
   },
   &quot;check&quot;: {
     &quot;id&quot;: 17,
-    &quot;score&quot;: 14.7,
+    &quot;score&quot;: 10.6,
     &quot;verdict&quot;: &quot;Borderline&quot;,
     &quot;verdict_level&quot;: &quot;borderline&quot;,
     &quot;reasons&quot;: [
       {
         &quot;ok&quot;: false,
-        &quot;feature&quot;: &quot;looks_like&quot;,
-        &quot;label&quot;: &quot;Overall look&quot;,
-        &quot;deviation&quot;: 0.71,
-        &quot;text&quot;: &quot;Overall look is unlike this team&#x27;s past posts (closer than only 15% of its own posts). Normal for a new kind of poster, so check the closest posts below.&quot;
+        &quot;feature&quot;: &quot;brightness&quot;,
+        &quot;label&quot;: &quot;Brightness&quot;,
+        &quot;text&quot;: &quot;Brightness: your design is brighter than this team&#x27;s usual posts (yours 86, usual 25-70 out of 100).&quot;,
+        &quot;plan&quot;: 0.857,
+        &quot;usual_low&quot;: 0.25,
+        &quot;usual_mid&quot;: 0.468,
+        &quot;usual_high&quot;: 0.702,
+        &quot;deviation&quot;: 0.86
       },
       {
-        &quot;ok&quot;: true,
-        &quot;feature&quot;: &quot;palette&quot;,
-        &quot;label&quot;: &quot;Colour palette&quot;,
-        &quot;deviation&quot;: 0.7,
-        &quot;text&quot;: &quot;Colours sit close to this team&#x27;s signature palette.&quot;
+        &quot;ok&quot;: false,
+        &quot;feature&quot;: &quot;looks_like&quot;,
+        &quot;label&quot;: &quot;Overall look&quot;,
+        &quot;deviation&quot;: 0.75,
+        &quot;text&quot;: &quot;Overall look is unlike this team&#x27;s past posts (closer than only 13% of its own posts). Normal for a new kind of poster, so check the closest posts below.&quot;
       },
       &quot;…&quot;
     ],
     &quot;plan_style&quot;: {
-      &quot;brightness&quot;: 0.476,
-      &quot;saturation&quot;: 0.583,
-      &quot;warmth&quot;: 0.293,
-      &quot;text_amount&quot;: 0.494,
-      &quot;busyness&quot;: 0.378,
-      &quot;whitespace&quot;: 0.399,
-      &quot;contrast&quot;: 0.585,
-      &quot;illustration&quot;: 0.697
+      &quot;brightness&quot;: 0.857,
+      &quot;saturation&quot;: 0.251,
+      &quot;warmth&quot;: 0.331,
+      &quot;text_amount&quot;: 0.56,
+      &quot;busyness&quot;: 0.44,
+      &quot;whitespace&quot;: 0.355,
+      &quot;contrast&quot;: 0.881,
+      &quot;illustration&quot;: 0.602
     },
     &quot;plan_palette&quot;: [
       {
-        &quot;hex&quot;: &quot;#302461&quot;,
-        &quot;share&quot;: 0.447
+        &quot;hex&quot;: &quot;#e9eaf2&quot;,
+        &quot;share&quot;: 0.554
       },
       {
-        &quot;hex&quot;: &quot;#1a1433&quot;,
-        &quot;share&quot;: 0.194
+        &quot;hex&quot;: &quot;#534eef&quot;,
+        &quot;share&quot;: 0.165
       },
       {
-        &quot;hex&quot;: &quot;#7363e4&quot;,
-        &quot;share&quot;: 0.153
+        &quot;hex&quot;: &quot;#333b4c&quot;,
+        &quot;share&quot;: 0.115
       },
       &quot;…&quot;
     ],
@@ -142,13 +146,13 @@ components on the Result page (or the Team style page). You do not build a separ
         &quot;comments&quot;: 35,
         &quot;decision&quot;: &quot;accepted&quot;,
         &quot;project&quot;: &quot;finlit-talk&quot;,
-        &quot;similarity&quot;: 0.732
+        &quot;similarity&quot;: 0.998
       },
       &quot;…&quot;
     ],
     &quot;engagement&quot;: {
       &quot;band&quot;: &quot;Below usual&quot;,
-      &quot;predicted_vs_usual&quot;: 0.55
+      &quot;predicted_vs_usual&quot;: 0.49
     },
     &quot;inspo_urls&quot;: [
       &quot;http://&lt;vibecheck-host&gt;:8000/media/uploads/check_ab12/0_inspo.jpg&quot;
@@ -223,62 +227,66 @@ metrics and items.</p>
   -F &quot;description=dark background, neon green code text, big bold title&quot; -F &quot;user=asha&quot; </code></pre><h4>Responses</h4><p><code>201</code> Successful Response, <code>422</code> Validation Error</p><h4>Example response</h4><pre><code class="json">{
   &quot;id&quot;: 17,
   &quot;team_id&quot;: 1,
-  &quot;score&quot;: 14.7,
+  &quot;score&quot;: 10.6,
   &quot;verdict&quot;: &quot;Borderline&quot;,
   &quot;verdict_level&quot;: &quot;borderline&quot;,
   &quot;thresholds&quot;: {
-    &quot;approve&quot;: 30.0,
-    &quot;borderline&quot;: 12.0
+    &quot;approve&quot;: 21.2,
+    &quot;borderline&quot;: 1.1
   },
   &quot;weights&quot;: {
     &quot;classifier&quot;: 0.0,
     &quot;on_brand&quot;: 1.0
   },
   &quot;components&quot;: {
-    &quot;looks_like&quot;: 0.147,
-    &quot;colour_match&quot;: 0.333,
-    &quot;on_brand&quot;: 0.147,
-    &quot;image_score&quot;: 14.7
+    &quot;looks_like&quot;: 0.127,
+    &quot;colour_match&quot;: 0.185,
+    &quot;on_brand&quot;: 0.106,
+    &quot;image_score&quot;: 10.6
   },
   &quot;reasons&quot;: [
     {
       &quot;ok&quot;: false,
-      &quot;feature&quot;: &quot;looks_like&quot;,
-      &quot;label&quot;: &quot;Overall look&quot;,
-      &quot;deviation&quot;: 0.71,
-      &quot;text&quot;: &quot;Overall look is unlike this team&#x27;s past posts (closer than only 15% of its own posts). Normal for a new kind of poster, so check the closest posts below.&quot;
+      &quot;feature&quot;: &quot;brightness&quot;,
+      &quot;label&quot;: &quot;Brightness&quot;,
+      &quot;text&quot;: &quot;Brightness: your design is brighter than this team&#x27;s usual posts (yours 86, usual 25-70 out of 100).&quot;,
+      &quot;plan&quot;: 0.857,
+      &quot;usual_low&quot;: 0.25,
+      &quot;usual_mid&quot;: 0.468,
+      &quot;usual_high&quot;: 0.702,
+      &quot;deviation&quot;: 0.86
     },
     {
-      &quot;ok&quot;: true,
-      &quot;feature&quot;: &quot;palette&quot;,
-      &quot;label&quot;: &quot;Colour palette&quot;,
-      &quot;deviation&quot;: 0.7,
-      &quot;text&quot;: &quot;Colours sit close to this team&#x27;s signature palette.&quot;
+      &quot;ok&quot;: false,
+      &quot;feature&quot;: &quot;looks_like&quot;,
+      &quot;label&quot;: &quot;Overall look&quot;,
+      &quot;deviation&quot;: 0.75,
+      &quot;text&quot;: &quot;Overall look is unlike this team&#x27;s past posts (closer than only 13% of its own posts). Normal for a new kind of poster, so check the closest posts below.&quot;
     },
     &quot;…&quot;
   ],
   &quot;plan_style&quot;: {
-    &quot;brightness&quot;: 0.476,
-    &quot;saturation&quot;: 0.583,
-    &quot;warmth&quot;: 0.293,
-    &quot;text_amount&quot;: 0.494,
-    &quot;busyness&quot;: 0.378,
-    &quot;whitespace&quot;: 0.399,
-    &quot;contrast&quot;: 0.585,
-    &quot;illustration&quot;: 0.697
+    &quot;brightness&quot;: 0.857,
+    &quot;saturation&quot;: 0.251,
+    &quot;warmth&quot;: 0.331,
+    &quot;text_amount&quot;: 0.56,
+    &quot;busyness&quot;: 0.44,
+    &quot;whitespace&quot;: 0.355,
+    &quot;contrast&quot;: 0.881,
+    &quot;illustration&quot;: 0.602
   },
   &quot;plan_palette&quot;: [
     {
-      &quot;hex&quot;: &quot;#302461&quot;,
-      &quot;share&quot;: 0.447
+      &quot;hex&quot;: &quot;#e9eaf2&quot;,
+      &quot;share&quot;: 0.554
     },
     {
-      &quot;hex&quot;: &quot;#1a1433&quot;,
-      &quot;share&quot;: 0.194
+      &quot;hex&quot;: &quot;#534eef&quot;,
+      &quot;share&quot;: 0.165
     },
     {
-      &quot;hex&quot;: &quot;#7363e4&quot;,
-      &quot;share&quot;: 0.153
+      &quot;hex&quot;: &quot;#333b4c&quot;,
+      &quot;share&quot;: 0.115
     },
     &quot;…&quot;
   ],
@@ -295,25 +303,25 @@ metrics and items.</p>
       &quot;comments&quot;: 35,
       &quot;decision&quot;: &quot;accepted&quot;,
       &quot;project&quot;: &quot;finlit-talk&quot;,
-      &quot;similarity&quot;: 0.732
+      &quot;similarity&quot;: 0.998
     },
     &quot;…&quot;
   ],
   &quot;engagement&quot;: {
     &quot;band&quot;: &quot;Below usual&quot;,
-    &quot;predicted_vs_usual&quot;: 0.55
+    &quot;predicted_vs_usual&quot;: 0.49
   },
   &quot;map_point&quot;: [
-    19.32063102722168,
-    12.287261009216309
+    19.164527893066406,
+    12.488146781921387
   ],
   &quot;description&quot;: &quot;&quot;,
   &quot;inspo_urls&quot;: [
-    &quot;/media/uploads/check_ce98af127cfa/0_finlit_G_glass.jpg&quot;
+    &quot;/media/uploads/check_f064e64de23d/0_finlit_wealth_code_final.jpg&quot;
   ],
   &quot;plugins&quot;: [],
-  &quot;model_version&quot;: 7,
-  &quot;created_at&quot;: &quot;2026-11-11T21:57:18.745589&quot;,
+  &quot;model_version&quot;: 10,
+  &quot;created_at&quot;: &quot;2026-11-11T22:16:18.590336&quot;,
   &quot;outcome&quot;: null,
   &quot;signature_palette&quot;: [
     {
@@ -339,62 +347,66 @@ metrics and items.</p>
 }</code></pre></section><section class="op" id="op-get-teams-team_id-checks"><h3><span class="m get">GET</span> <code>/teams/{team_id}/checks</code></h3><p class="summary">List Checks</p><h4>Parameters</h4><table><thead><tr><th>Name</th><th>In</th><th>Type</th><th>Description</th></tr></thead><tbody><tr><td><code>team_id</code> <span class=req>required</span></td><td>path</td><td>integer</td><td></td></tr><tr><td><code>limit</code></td><td>query</td><td>integer</td><td> Default: <code>50</code>. Max 500.</td></tr></tbody></table><h4>Responses</h4><p><code>200</code> Successful Response, <code>422</code> Validation Error</p></section><section class="op" id="op-get-checks-check_id"><h3><span class="m get">GET</span> <code>/checks/{check_id}</code></h3><p class="summary">Get Check</p><h4>Parameters</h4><table><thead><tr><th>Name</th><th>In</th><th>Type</th><th>Description</th></tr></thead><tbody><tr><td><code>check_id</code> <span class=req>required</span></td><td>path</td><td>integer</td><td></td></tr></tbody></table><h4>Responses</h4><p><code>200</code> Successful Response, <code>422</code> Validation Error</p><h4>Example response</h4><pre><code class="json">{
   &quot;id&quot;: 17,
   &quot;team_id&quot;: 1,
-  &quot;score&quot;: 14.7,
+  &quot;score&quot;: 10.6,
   &quot;verdict&quot;: &quot;Borderline&quot;,
   &quot;verdict_level&quot;: &quot;borderline&quot;,
   &quot;thresholds&quot;: {
-    &quot;approve&quot;: 30.0,
-    &quot;borderline&quot;: 12.0
+    &quot;approve&quot;: 21.2,
+    &quot;borderline&quot;: 1.1
   },
   &quot;weights&quot;: {
     &quot;classifier&quot;: 0.0,
     &quot;on_brand&quot;: 1.0
   },
   &quot;components&quot;: {
-    &quot;looks_like&quot;: 0.147,
-    &quot;colour_match&quot;: 0.333,
-    &quot;on_brand&quot;: 0.147,
-    &quot;image_score&quot;: 14.7
+    &quot;looks_like&quot;: 0.127,
+    &quot;colour_match&quot;: 0.185,
+    &quot;on_brand&quot;: 0.106,
+    &quot;image_score&quot;: 10.6
   },
   &quot;reasons&quot;: [
     {
       &quot;ok&quot;: false,
-      &quot;feature&quot;: &quot;looks_like&quot;,
-      &quot;label&quot;: &quot;Overall look&quot;,
-      &quot;deviation&quot;: 0.71,
-      &quot;text&quot;: &quot;Overall look is unlike this team&#x27;s past posts (closer than only 15% of its own posts). Normal for a new kind of poster, so check the closest posts below.&quot;
+      &quot;feature&quot;: &quot;brightness&quot;,
+      &quot;label&quot;: &quot;Brightness&quot;,
+      &quot;text&quot;: &quot;Brightness: your design is brighter than this team&#x27;s usual posts (yours 86, usual 25-70 out of 100).&quot;,
+      &quot;plan&quot;: 0.857,
+      &quot;usual_low&quot;: 0.25,
+      &quot;usual_mid&quot;: 0.468,
+      &quot;usual_high&quot;: 0.702,
+      &quot;deviation&quot;: 0.86
     },
     {
-      &quot;ok&quot;: true,
-      &quot;feature&quot;: &quot;palette&quot;,
-      &quot;label&quot;: &quot;Colour palette&quot;,
-      &quot;deviation&quot;: 0.7,
-      &quot;text&quot;: &quot;Colours sit close to this team&#x27;s signature palette.&quot;
+      &quot;ok&quot;: false,
+      &quot;feature&quot;: &quot;looks_like&quot;,
+      &quot;label&quot;: &quot;Overall look&quot;,
+      &quot;deviation&quot;: 0.75,
+      &quot;text&quot;: &quot;Overall look is unlike this team&#x27;s past posts (closer than only 13% of its own posts). Normal for a new kind of poster, so check the closest posts below.&quot;
     },
     &quot;…&quot;
   ],
   &quot;plan_style&quot;: {
-    &quot;brightness&quot;: 0.476,
-    &quot;saturation&quot;: 0.583,
-    &quot;warmth&quot;: 0.293,
-    &quot;text_amount&quot;: 0.494,
-    &quot;busyness&quot;: 0.378,
-    &quot;whitespace&quot;: 0.399,
-    &quot;contrast&quot;: 0.585,
-    &quot;illustration&quot;: 0.697
+    &quot;brightness&quot;: 0.857,
+    &quot;saturation&quot;: 0.251,
+    &quot;warmth&quot;: 0.331,
+    &quot;text_amount&quot;: 0.56,
+    &quot;busyness&quot;: 0.44,
+    &quot;whitespace&quot;: 0.355,
+    &quot;contrast&quot;: 0.881,
+    &quot;illustration&quot;: 0.602
   },
   &quot;plan_palette&quot;: [
     {
-      &quot;hex&quot;: &quot;#302461&quot;,
-      &quot;share&quot;: 0.447
+      &quot;hex&quot;: &quot;#e9eaf2&quot;,
+      &quot;share&quot;: 0.554
     },
     {
-      &quot;hex&quot;: &quot;#1a1433&quot;,
-      &quot;share&quot;: 0.194
+      &quot;hex&quot;: &quot;#534eef&quot;,
+      &quot;share&quot;: 0.165
     },
     {
-      &quot;hex&quot;: &quot;#7363e4&quot;,
-      &quot;share&quot;: 0.153
+      &quot;hex&quot;: &quot;#333b4c&quot;,
+      &quot;share&quot;: 0.115
     },
     &quot;…&quot;
   ],
@@ -411,25 +423,25 @@ metrics and items.</p>
       &quot;comments&quot;: 35,
       &quot;decision&quot;: &quot;accepted&quot;,
       &quot;project&quot;: &quot;finlit-talk&quot;,
-      &quot;similarity&quot;: 0.732
+      &quot;similarity&quot;: 0.998
     },
     &quot;…&quot;
   ],
   &quot;engagement&quot;: {
     &quot;band&quot;: &quot;Below usual&quot;,
-    &quot;predicted_vs_usual&quot;: 0.55
+    &quot;predicted_vs_usual&quot;: 0.49
   },
   &quot;map_point&quot;: [
-    19.32063102722168,
-    12.287261009216309
+    19.164527893066406,
+    12.488146781921387
   ],
   &quot;description&quot;: &quot;&quot;,
   &quot;inspo_urls&quot;: [
-    &quot;/media/uploads/check_ce98af127cfa/0_finlit_G_glass.jpg&quot;
+    &quot;/media/uploads/check_f064e64de23d/0_finlit_wealth_code_final.jpg&quot;
   ],
   &quot;plugins&quot;: [],
-  &quot;model_version&quot;: 7,
-  &quot;created_at&quot;: &quot;2026-11-11T21:57:18.745589&quot;,
+  &quot;model_version&quot;: 10,
+  &quot;created_at&quot;: &quot;2026-11-11T22:16:18.590336&quot;,
   &quot;outcome&quot;: null,
   &quot;signature_palette&quot;: [
     {
@@ -487,13 +499,13 @@ metrics and items.</p>
   &quot;job_id&quot;: 8
 }</code></pre></section><section class="op" id="op-get-teams-team_id-model"><h3><span class="m get">GET</span> <code>/teams/{team_id}/model</code></h3><p class="summary">Current model, its accuracy, and history</p><h4>Parameters</h4><table><thead><tr><th>Name</th><th>In</th><th>Type</th><th>Description</th></tr></thead><tbody><tr><td><code>team_id</code> <span class=req>required</span></td><td>path</td><td>integer</td><td></td></tr></tbody></table><h4>Responses</h4><p><code>200</code> Successful Response, <code>422</code> Validation Error</p><h4>Example response</h4><pre><code class="json">{
   &quot;current&quot;: {
-    &quot;id&quot;: 7,
+    &quot;id&quot;: 10,
     &quot;team_id&quot;: 1,
-    &quot;trained_at&quot;: &quot;2026-11-11T21:52:16.308699&quot;,
+    &quot;trained_at&quot;: &quot;2026-11-11T22:15:45.446147&quot;,
     &quot;metrics&quot;: {
       &quot;thresholds&quot;: {
-        &quot;approve&quot;: 30.0,
-        &quot;borderline&quot;: 12.0
+        &quot;approve&quot;: 21.2,
+        &quot;borderline&quot;: 1.1
       },
       &quot;weights&quot;: {
         &quot;classifier&quot;: 0.0,
@@ -504,22 +516,22 @@ metrics and items.</p>
   },
   &quot;history&quot;: [
     {
-      &quot;id&quot;: 7,
-      &quot;trained_at&quot;: &quot;2026-11-11T21:52:16.308699&quot;,
+      &quot;id&quot;: 10,
+      &quot;trained_at&quot;: &quot;2026-11-11T22:15:45.446147&quot;,
       &quot;auc&quot;: null
     },
     {
-      &quot;id&quot;: 6,
-      &quot;trained_at&quot;: &quot;2026-11-11T21:50:23.781432&quot;,
+      &quot;id&quot;: 9,
+      &quot;trained_at&quot;: &quot;2026-11-11T22:13:44.353641&quot;,
       &quot;auc&quot;: null
     }
   ]
 }</code></pre></section><section class="op" id="op-get-teams-team_id-style-profile"><h3><span class="m get">GET</span> <code>/teams/{team_id}/style-profile</code></h3><p class="summary">Get Style Profile</p><h4>Parameters</h4><table><thead><tr><th>Name</th><th>In</th><th>Type</th><th>Description</th></tr></thead><tbody><tr><td><code>team_id</code> <span class=req>required</span></td><td>path</td><td>integer</td><td></td></tr><tr><td><code>include_plugins</code></td><td>query</td><td>boolean</td><td> Default: <code>true</code>.</td></tr></tbody></table><h4>Example request</h4><pre><code class="sh">curl $API/teams/1/style-profile</code></pre><h4>Responses</h4><p><code>200</code> Successful Response, <code>422</code> Validation Error</p><h4>Example response</h4><pre><code class="json">{
-  &quot;model_version&quot;: 7,
-  &quot;trained_at&quot;: &quot;2026-11-11T21:52:16.308699&quot;,
+  &quot;model_version&quot;: 10,
+  &quot;trained_at&quot;: &quot;2026-11-11T22:15:45.446147&quot;,
   &quot;thresholds&quot;: {
-    &quot;approve&quot;: 30.0,
-    &quot;borderline&quot;: 12.0
+    &quot;approve&quot;: 21.2,
+    &quot;borderline&quot;: 1.1
   },
   &quot;date_range&quot;: [
     &quot;2026-03-17T09:18:55&quot;,

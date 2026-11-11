@@ -7,9 +7,9 @@ and the team's closest past posts.
 FDE1 course project (IIT Kanpur, 2026-27).
 
 > **Status:** the pipeline, API, plugin system and dashboards work end to end. It scores plans *and* finished
-> designs. It does **not** yet predict what the seniors approve: with 2 accepted and 9 rejected designs on record,
-> accepted vs rejected is close to a coin flip, and bigger image models (DINOv2, OCR typography) did not change that.
-> The approval model switches itself on once enough decided designs are recorded.
+> designs. Model v4 ranks the team's real new posts above its rejected drafts (AUC 0.90 on posts it had not seen,
+> `scripts/evaluate.py`) and accepted above rejected designs at AUC 0.83 (2 accepted, 9 rejected: small). It can't yet
+> say "approved" with confidence; the approval model switches itself on once enough decided designs are recorded.
 > See [KNOWN_ISSUES.md](KNOWN_ISSUES.md) for everything that fails, the evidence, and what to improve.
 
 ## Two checks
@@ -76,6 +76,14 @@ score never trains on them. The first run of text detection downloads EasyOCR's 
    See `GET /plugins/panel-example` and the `Panel` schema in `/docs`. Your service may call any of our endpoints using `api_base`.
 
 Example: `plugins/contrast_checker/app.py` (run on port 8100).
+
+## Evaluate the model on your data
+
+```bash
+.venv/Scripts/python scripts/evaluate.py          # add --dino to also test DINOv2
+```
+Scores every month's posts with a model that only knew older posts, and every series with a model built from the
+other series, against the rejected drafts. Use it before changing the scorer.
 
 ## Tests
 

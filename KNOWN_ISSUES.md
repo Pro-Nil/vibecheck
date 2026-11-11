@@ -4,9 +4,44 @@ Honest status as of 12 Nov 2026. Everything below was found by running the app o
 74 posts from one fest's Instagram page (Mar–Nov 2026) and 9 drafts of one talk poster that the design
 team rejected, plus 2 posters the team accepted.
 
-**Short version:** the pipeline, API, plugins and dashboards work end to end. The model does **not** yet do
-the one thing the product promises: it cannot tell a poster the team will accept from one it will reject.
-The cause is data, not code, and the fix is listed under "Improvements".
+**Short version:** the pipeline, API, plugins and dashboards work end to end. Model v4 ranks the team's real
+new posts above its rejected drafts (AUC 0.90 on posts it had not seen) and the 2 accepted one-offs above most
+rejects (AUC 0.83, was 0.53). It still cannot *confidently* say "approved": everything real lands in the wide
+"Borderline" band, all rejected drafts come from one brief, and only 2 accepted designs are on record.
+More decided designs (see "Improvements") are what would move it further.
+
+## 00. Model v4 (12 Nov 2026): a better test, then a better scorer
+
+**New evaluation, `scripts/evaluate.py`.** Two accepted designs are too few to judge anything, but every post the
+team published later *is* an approved new design. So:
+- **A. time-forward:** for each month, the model knows only older posts and scores that month's posts (33 real
+  new posts) and the 9 rejected drafts.
+- **B. series held out:** each series of near-identical posts is scored by a model built from the other series (75 posts).
+
+It exposed two real bugs in v2/v3:
+1. **Novelty penalty:** 33 % of genuinely approved new posts would have been called "Off-brand".
+2. **Floor effect:** a design less similar than *every* past post got percentile 0, however far off it was, so new
+   one-offs (WEALTH CODE: 0) tied with bad drafts (0, 0, 0, 0, 0).
+
+| Scorer | A: AUC new posts vs rejects (95 % CI) | B: AUC | FinLit final beats own drafts | Pandiya |
+|---|---|---|---|---|
+| v2/v3: look (k=5) + colour, plain percentiles | 0.76 (0.65-0.84) | 0.92 | 0 / 9 | 22 |
+| colour vs topic only | 0.66 | 0.80 | 6 / 9 | 42 |
+| DINOv2 look | 0.17 | 0.45 | 8 / 9 | 8 |
+| typography vs topic | 0.34 | 0.56 | 3 / 9 | 30 |
+| **v4: smooth percentiles, look (k=10) x2 + colour on the z scale** | **0.90 (0.76-0.93)** | **0.96** | **9 / 9** | 19 |
+
+Variants k = 8-10 and look weight 1.5-3 all score within 0.02, so v4 is not a lucky setting. About 20 variants
+were tried against the same 9 rejects, so expect the true gain to be somewhat smaller than shown.
+
+**Verdict lines are now calibrated on new posts:** "Off-brand" = below the 10th percentile of the real new posts'
+scores (12 % of them land there, was 33-42 %), "On-brand" = above the median new post. Every result also says
+"fits better than X % of the posts this team actually published next".
+
+**Result on the labelled designs:** all 9 rejects below the on-brand line, none called Off-brand; Pandiya (accepted)
+scores above all 9 rejects, WEALTH CODE (accepted) above 6 of 9 → accepted-vs-rejected AUC **0.83** (v2: 0.53).
+Same-brief pairs ranked right: 67 % (6 of 9). Every real design currently lands "Borderline": the model ranks
+better, but the gap between accepted and rejected is small compared with the spread of normal new posts.
 
 ## 0. Model v2 (12 Nov 2026): what changed and what it achieved
 
@@ -138,10 +173,11 @@ The first versions reported hold-out AUC 0.87–0.91 and "8 of 8 rejected drafts
 near-misses the honest hold-out AUC is **0.71**, and the rejected drafts score 66–73 against 71–78 for accepted posters.
 The test split is also tiny (≈14 team posts), so any single number has a wide error bar.
 
-### F6. The verdict line is not calibrated to approval
+### F6. The verdict line is not calibrated to approval (partly fixed in v4)
 
-In v2 (no other pages) the lines are fixed percentiles: 30+ on-brand, 12–29 borderline. With other pages they come
-from Youden's J on held-out posts. Neither says anything about what the seniors actually approve.
+v4 sets the lines from how the team's real new posts scored (10 % Off-brand, median = On-brand line), which fixes
+the novelty penalty. They are still calibrated on what got *posted*, not on what the seniors approved; with
+decided designs the approval model should take over.
 
 ### F6b. Some accepted one-off posters score Off-brand
 
