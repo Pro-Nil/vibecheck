@@ -61,7 +61,8 @@ export default function ResultPage({ checkId }) {
           <p className="muted">
             Score {Math.round(c.score)} / 100 ({Math.round(c.thresholds.approve)}+ on-brand, {Math.round(c.thresholds.borderline)}–{Math.round(c.thresholds.approve) - 1} borderline).
             {c.components.on_brand !== undefined && c.components.classifier === undefined &&
-              <> Your images alone are more on-brand than {Math.round(c.components.on_brand * 100)}% of this team's own posts.</>}
+              <> Your {final ? 'design is' : 'images alone are'} more on-brand than {Math.round(c.components.on_brand * 100)}% of this team's own posts.</>}
+            {c.vs_new_posts != null && <> It fits better than <strong>{pct(c.vs_new_posts)}%</strong> of the posts this team actually published next (tested on posts the model had not seen).</>}
           </p>
           <p className="small muted">
             {c.components.looks_like !== undefined && <>Overall look {pct(c.components.looks_like)} · colours vs similar-topic posts {pct(c.components.colour_match)}</>}

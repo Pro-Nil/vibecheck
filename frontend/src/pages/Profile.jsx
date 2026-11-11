@@ -52,6 +52,12 @@ export default function ProfilePage({ teamId, team }) {
           {m.auc != null && <div className="tile"><div className="v">{m.auc}</div><div className="l">AUC on unseen posts: our posts vs other pages (1.0 = perfect, 0.5 = guessing)</div></div>}
           {m.accuracy != null && <div className="tile"><div className="v">{pct(m.accuracy)}%</div><div className="l">correct at the on-brand line (unseen posts)</div></div>}
           <div className="tile"><div className="v">{m.real_rejects ? `${m.real_rejects.below_approve} / ${m.real_rejects.n}` : '—'}</div><div className="l">real rejected drafts below the on-brand line{m.real_rejects ? ` (${m.real_rejects.below_borderline} below borderline)` : ''}. A check, not proof: accepted one-off posters can score low too.</div></div>
+          {m.calibration?.n > 0 && (
+            <div className="tile">
+              <div className="v">{pct(m.calibration.new_posts_off_brand)}% / {pct(m.calibration.new_posts_on_brand)}%</div>
+              <div className="l">of {m.calibration.n} real new team posts scored Off-brand / On-brand when the model only knew older posts ({m.calibration.method}). The lines are set from these.</div>
+            </div>
+          )}
           {m.approval && (
             <div className="tile">
               <div className="v">{m.approval.on ? `On · ${m.approval.auc}` : 'Off'}</div>

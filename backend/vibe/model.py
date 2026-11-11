@@ -1,13 +1,20 @@
 """The adaptive core: learns one team's style and scores a designer's plan against it.
 
 ON-BRAND (0-100) is a percentile against the team's OWN posts: 40 means "more on-brand than 40 % of
-this team's posts". It needs no rejected examples. Two signals, each a percentile, averaged:
+this team's posts". It needs no rejected examples. Two signals:
 
-  * looks-like   - mean CLIP similarity to the 5 most similar team posts, ignoring near-twins
+  * looks-like   - mean CLIP similarity to the 10 most similar team posts, ignoring near-twins
                    (posts from the same series; > 0.90 similar) so a new poster is not punished for
                    having no twin.
   * colour-match - Lab colour histogram compared only with the 8 team posts on the most similar topic
                    (by CLIP), so a talk poster is judged against past talk posters, not Diwali wishes.
+
+v4: percentiles are kernel-smoothed (a design far below every team post still ranks below one just
+below), and the two signals are combined on the normal z scale, look weighted 2:1. With plain
+percentiles every unusual design scored 0, so new one-offs tied with bad drafts. The verdict lines are
+set from how the team's real NEW posts scored when the model only knew older posts (time-forward), so
+about 10 % of genuinely approved new posts land "Off-brand". scripts/evaluate.py measures all of this:
+time-forward AUC new-posts-vs-rejected-drafts 0.76 -> 0.90 on the first team.
 
 When at least MIN_OTHER posts from other pages exist (real "not us" examples), a logistic-regression
 classifier (team vs other pages + near-misses) is blended in, weighted by its held-out AUC.
@@ -49,19 +56,23 @@ from .db import ModelVersion, Post, SessionLocal
 from . import finish
 from .features import STYLE_KEYS, STYLE_LABELS, STYLE_WORDS
 
-TOP_K = 5                 # nearest team posts for "looks like"
+TOP_K = 10                # nearest team posts for "looks like" (8-10 tested equal; 5 was worse)
+LOOK_WEIGHT = 2.0         # look : colour on the z scale (1.5-3 tested equal)
 TOPIC_K = 8               # same-topic team posts for "colour match"
 TWIN_SIM = 0.90           # above this CLIP similarity two posts count as the same series
 MIN_OTHER = 20            # other-page posts needed before the classifier is used
 IMG_WEIGHT, TEXT_WEIGHT = 0.75, 0.25
-ONE_CLASS_THRESHOLDS = {"approve": 30.0, "borderline": 12.0}  # percentiles of the team's own posts
+ONE_CLASS_THRESHOLDS = {"approve": 30.0, "borderline": 12.0}  # fallback when lines can't be calibrated
+NEW_POST_OFF_RATE = 0.10  # calibrated lines: share of real new team posts allowed below "borderline"
+NEW_POST_ON_RATE = 0.50   # ... and share that reaches "on-brand" (the median new post)
+MIN_CALIBRATION = 15      # new-post scores needed to calibrate the lines
 NEAR_MISS_MAX_SIM = 0.85  # near-misses closer than this to their original are contradictory, not used
 STYLE_TOLERANCE = 0.04    # a feature within 4 points of the team's usual range still counts as fitting
 MIN_DECIDED = 8           # accepted AND rejected designs needed before the approval model is used
 MIN_PROJECTS = 3          # ...from at least this many different projects (briefs)
 MIN_APPROVAL_AUC = 0.60   # leave-one-project-out AUC it must reach to be used
 MAX_APPROVAL_WEIGHT = 0.6
-ARTIFACT_VERSION = 3
+ARTIFACT_VERSION = 4
 _cache: dict[int, tuple[int, dict]] = {}
 _cache_lock = threading.Lock()
 
@@ -124,6 +135,24 @@ def _ecdf(sorted_ref: np.ndarray, x) -> np.ndarray:
     return np.searchsorted(sorted_ref, x, side="right") / len(sorted_ref)
 
 
+def _smooth_ecdf(sorted_ref: np.ndarray, x, h: float) -> np.ndarray:
+    """Kernel-smoothed percentile: the ECDF in the middle, but keeps ordering beyond the extremes."""
+    from scipy.stats import norm
+    x = np.atleast_1d(np.asarray(x, float))
+    if len(sorted_ref) == 0:
+        return np.full(len(x), 0.5)
+    return norm.cdf((x[:, None] - sorted_ref[None]) / h).mean(1)
+
+
+def _bandwidth(ref: np.ndarray) -> float:
+    return float(1.06 * np.std(ref) * max(1, len(ref)) ** -0.2 + 1e-9)   # Silverman
+
+
+def _probit(p: float) -> float:
+    from scipy.stats import norm
+    return float(norm.ppf(np.clip(p, 1e-4, 1 - 1e-4)))
+
+
 def _chi2(h: np.ndarray, H: np.ndarray) -> np.ndarray:
     return np.sum((H - h) ** 2 / (H + h + 1e-9), axis=1)
 
@@ -145,8 +174,9 @@ class _OnBrand:
         raw = [self._raw(team_clip[i], team_hist[i], exclude=i) for i in range(len(team_clip))]
         self.ref_look = np.sort([r[0] for r in raw])
         self.ref_colour = np.sort([r[1] for r in raw])
-        combined = [self._mean_pct(a, b) for a, b in raw]
-        self.ref_combined = np.sort(combined)
+        self.h_look, self.h_colour = _bandwidth(self.ref_look), _bandwidth(self.ref_colour)
+        self.ref_combined = np.sort([self._z(*self._pcts(a, b)) for a, b in raw])
+        self.h_combined = _bandwidth(self.ref_combined)
 
     def _raw(self, v: np.ndarray, h: np.ndarray, exclude: int | None = None) -> tuple[float, float]:
         sims = self.vecs @ v
@@ -163,14 +193,61 @@ class _OnBrand:
         colour = -float(_chi2(h, self.hist[topic]).mean())   # higher = closer
         return look, colour
 
-    def _mean_pct(self, look: float, colour: float) -> float:
-        return 0.5 * float(_ecdf(self.ref_look, look)[0]) + 0.5 * float(_ecdf(self.ref_colour, colour)[0])
+    def _pcts(self, look: float, colour: float) -> tuple[float, float]:
+        return (float(_smooth_ecdf(self.ref_look, look, self.h_look)[0]),
+                float(_smooth_ecdf(self.ref_colour, colour, self.h_colour)[0]))
+
+    @staticmethod
+    def _z(lp: float, cp: float) -> float:
+        return (LOOK_WEIGHT * _probit(lp) + _probit(cp)) / (LOOK_WEIGHT + 1)
 
     def parts(self, v: np.ndarray, h: np.ndarray, exclude: int | None = None) -> dict:
-        look, colour = self._raw(v, h, exclude)
-        lp, cp = float(_ecdf(self.ref_look, look)[0]), float(_ecdf(self.ref_colour, colour)[0])
+        lp, cp = self._pcts(*self._raw(v, h, exclude))
         return {"looks_like": lp, "colour_match": cp,
-                "on_brand": float(_ecdf(self.ref_combined, 0.5 * lp + 0.5 * cp)[0])}
+                "on_brand": float(_smooth_ecdf(self.ref_combined, self._z(lp, cp), self.h_combined)[0])}
+
+
+def _new_post_scores(d: dict, is_team: np.ndarray) -> tuple[np.ndarray, str]:
+    """On-brand scores (0-1) the team's own posts got when the model knew only OLDER posts (each month vs
+    everything before it). If too few posts are dated, each series is scored against all other series."""
+    team = np.where(is_team)[0]
+    months = np.array([d["posted_at"][i].strftime("%Y-%m") if d["posted_at"][i] else "9999-99" for i in team], object)
+    out = []
+    for m in sorted(set(months))[1:]:
+        ref, test = team[months < m], team[months == m]
+        if len(ref) < 10:
+            continue
+        ob = _OnBrand(d["clip"][ref], d["hist"][ref])
+        out += [ob.parts(d["clip"][i], d["hist"][i])["on_brand"] for i in test]
+    if len(out) >= MIN_CALIBRATION:
+        return np.array(out), "time-forward"
+    # series held out: connected groups of posts more than TWIN_SIM similar
+    S = d["clip"][team] @ d["clip"][team].T
+    group = np.arange(len(team))
+    for i in range(len(team)):
+        for j in np.where(S[i] > TWIN_SIM)[0]:
+            group[group == group[j]] = group[i]
+    out = []
+    for g in set(group):
+        ref = team[group != g]
+        if len(ref) < 10:
+            continue
+        ob = _OnBrand(d["clip"][ref], d["hist"][ref])
+        out += [ob.parts(d["clip"][i], d["hist"][i])["on_brand"] for i in team[group == g]]
+    return np.array(out), "series held out"
+
+
+def _calibrated_thresholds(d: dict, is_team: np.ndarray) -> tuple[dict, dict, np.ndarray]:
+    scores, how = _new_post_scores(d, is_team)
+    if len(scores) < MIN_CALIBRATION:
+        return (dict(ONE_CLASS_THRESHOLDS), {"method": "fixed (too few posts to calibrate)", "n": int(len(scores))},
+                np.array([]))
+    border = float(np.percentile(100 * scores, 100 * NEW_POST_OFF_RATE))
+    approve = float(np.percentile(100 * scores, 100 * (1 - NEW_POST_ON_RATE)))
+    th = {"approve": round(max(approve, border + 3, 5.0), 1), "borderline": round(max(border, 0.5), 1)}
+    return th, {"method": how, "n": int(len(scores)), "new_post_median": round(float(np.median(100 * scores)), 1),
+                "new_posts_off_brand": round(float((100 * scores < th["borderline"]).mean()), 3),
+                "new_posts_on_brand": round(float((100 * scores >= th["approve"]).mean()), 3)}, np.sort(100 * scores)
 
 
 def _classifier(clip, style, is_pos):
@@ -452,7 +529,7 @@ def train(team_id: int) -> dict:
                      "n_near_miss": int(is_aug.sum()), "n_near_miss_dropped": int(is_aug_all.sum() - is_aug.sum()),
                      "n_rejected": int(is_rej.sum())}
     rng = np.random.default_rng(0)
-    thresholds = dict(ONE_CLASS_THRESHOLDS)
+    thresholds, metrics["calibration"], new_post_scores = _calibrated_thresholds(d, is_team)
     w_clf = 0.0
 
     # ---- hold-out test (20 % of team posts + 20 % of other pages; near-misses follow their parent)
@@ -529,7 +606,7 @@ def train(team_id: int) -> dict:
     reducer, coords = _style_map(d)
     team_dates = [p for p, t in zip(d["posted_at"], is_team) if t and p]
     artifact = {
-        "version": ARTIFACT_VERSION, "onbrand": ob, "approval": approval, "typo_ranges": typo_ranges, "clf": clf, "w_clf": w_clf, "thresholds": thresholds,
+        "version": ARTIFACT_VERSION, "onbrand": ob, "new_post_scores": new_post_scores, "approval": approval, "typo_ranges": typo_ranges, "clf": clf, "w_clf": w_clf, "thresholds": thresholds,
         "team_vecs": d["clip"][is_team], "team_ids": d["id"][is_team], "other_vecs": d["clip"][other_rows],
         "team_aesthetic": team_aes,
         "ranges": ranges,
@@ -689,6 +766,8 @@ def score(team_id: int, images: list[Image.Image], description: str = "", kind: 
     out["confidence"] = {"level": "low" if sparse or len(notes) >= 2 else "medium" if notes else "high",
                          "notes": notes}
     level, label = _verdict(total, th)
+    nps = art.get("new_post_scores")
+    out["vs_new_posts"] = (round(float(_ecdf(nps, total)[0]), 3) if nps is not None and len(nps) else None)
     out.update({"score": round(total, 1), "verdict": label, "verdict_level": level, "appeal": appeal})
 
     # ---- reasons

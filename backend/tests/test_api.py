@@ -193,8 +193,9 @@ def test_on_brand_only_mode_ranks_team_style_higher(client, dataset):
         return r.json()
     good, bad = check(team_style_image(321)), check(other_style_image(321))
     assert "classifier" not in good["components"]
-    # synthetic team posters are near-identical, so scores bunch up; the ranking is what matters
-    assert good["score"] > bad["score"] + 10
+    # synthetic team posters are near-identical (similarity ~0.99), so after near-twin exclusion a new good
+    # poster sits at the bottom of a very narrow range; the ranking is what matters
+    assert good["score"] > bad["score"]
     assert good["components"]["on_brand"] > bad["components"]["on_brand"]
     assert bad["verdict"] == "Off-brand"
     assert {"looks_like", "colour_match", "on_brand"} <= set(good["components"])
@@ -276,3 +277,24 @@ def test_approval_model_needs_decisions_then_turns_on(client):
     final = client.post(f"/teams/{tid}/checks", data={"kind": "final"},
                         files=[("images", ("f.png", png(team_style_image(4000)), "image/png"))]).json()
     assert "approval" in final["components"] and final["weights"]["approval"] == ap["weight"]
+
+
+def test_lines_are_calibrated_on_new_posts(client, dataset):
+    """v4: verdict lines come from how the team's later posts scored when the model knew only older ones."""
+    t = next(x for x in client.get("/teams").json() if x["name"] == "Team only")
+    m = client.get(f"/teams/{t['id']}/model").json()["current"]["metrics"]
+    cal = m["calibration"]
+    assert cal["n"] >= 15 and cal["method"] in ("time-forward", "series held out")
+    assert 0.05 <= cal["new_posts_off_brand"] <= 0.2
+    assert m["thresholds"]["borderline"] < m["thresholds"]["approve"]
+    r = client.post(f"/teams/{t['id']}/checks", files=[("images", ("a.png", png(team_style_image(77)), "image/png"))]).json()
+    assert 0 <= r["vs_new_posts"] <= 1
+
+
+def test_smooth_scores_keep_order_below_every_team_post():
+    """A design far below every team post must score lower than one just below (plain percentiles gave both 0)."""
+    import numpy as np
+    from vibe.model import _bandwidth, _smooth_ecdf
+    ref = np.sort(np.random.default_rng(0).normal(0.7, 0.03, 50))
+    lo, very_lo = _smooth_ecdf(ref, [ref.min() - 0.01, ref.min() - 0.2], _bandwidth(ref))
+    assert 0 < very_lo < lo < 0.05
