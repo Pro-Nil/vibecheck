@@ -6,9 +6,20 @@ and the team's closest past posts.
 
 FDE1 course project (IIT Kanpur, 2026-27).
 
-> **Status:** the pipeline, API, plugin system and dashboards work end to end. The model does **not** yet
-> separate posters the team accepts from ones it rejects; with the data available so far both score about the
-> same. See [KNOWN_ISSUES.md](KNOWN_ISSUES.md) for everything that fails, the evidence, and what to improve.
+> **Status:** the pipeline, API, plugin system and dashboards work end to end. It scores plans *and* finished
+> designs. It does **not** yet predict what the seniors approve: with 2 accepted and 9 rejected designs on record,
+> accepted vs rejected is close to a coin flip, and bigger image models (DINOv2, OCR typography) did not change that.
+> The approval model switches itself on once enough decided designs are recorded.
+> See [KNOWN_ISSUES.md](KNOWN_ISSUES.md) for everything that fails, the evidence, and what to improve.
+
+## Two checks
+
+- **Check my idea** (before designing): 1-5 inspiration images and/or a description → on-brand score, reasons,
+  closest past posts.
+- **Check my design** (after designing): the finished poster → on-brand score of the design itself, a finish
+  checklist (headline legibility, low-contrast text, amount of text, headline size, resolution, shape; each
+  calibrated on the team's own posts), "plan vs final" when linked to the plan check, and the learned approval
+  model once it has enough data. Mark what the seniors decided and that design becomes training data.
 
 ## Run it
 
@@ -33,7 +44,9 @@ Frontend development with hot reload: `cd frontend && npm run dev` → http://lo
    .venv/Scripts/instaloader --login YOUR_USERNAME
    ```
    then start the server with `VIBE_IG_SESSION_USER=YOUR_USERNAME` set, and import again.
-2. **Team setup → Upload images**: pick many files, say whether they are team posts, other pages' posts, or rejected drafts.
+2. **Team setup → Upload images**: pick many files, say whether they are team posts, other pages' posts, designs the
+   seniors accepted, or rejected drafts (with a project name, so versions of one brief can be compared).
+   This is the most valuable data: the approval model learns only from decided designs.
 3. **API with a folder**: `POST /teams/{id}/import` with `{"fetch_instagram": false, "folders": [{"path": "C:/posts", "label": "team"}]}`.
    A `meta.csv` (`filename,caption,posted_at,likes,comments`) or Instaloader's `.json.xz` files next to the images are read for likes and dates.
 
@@ -46,12 +59,13 @@ Every import computes features, makes near-miss images and retrains. A scheduler
 |---|---|---|
 | Data (ETL) | `backend/vibe/importers.py`, `pipeline.py` | Instaloader / folders / uploads → images + likes + dates → SQLite (`data/vibecheck.db`) |
 | Features | `features.py` | CLIP ViT-B/32 embedding (512 numbers) + 8 readable style features (brightness, saturation, warmth, text amount, busyness, empty space, contrast, illustration) + 5-colour palette |
-| Adaptive | `model.py`, `augment.py` | Logistic regression (team vs other pages + near-misses) + nearest-neighbour similarity percentile; text scored against team vs other posts; thresholds set from a 20% hold-out; ridge regression for engagement; UMAP style map. Retrains on every import and daily. |
+| Adaptive | `model.py`, `augment.py`, `finish.py` | Approval model trained on designs the seniors decided on (leave-one-project-out validated, switches on at 8 accepted + 8 rejected from 3 projects); finish checks from text detection (EasyOCR), calibrated on team posts; on-brand score: percentile among the team's own posts from CLIP look (near-twins ignored) + colour match against same-topic past posts; a logistic regression (team vs other pages + near-misses) is blended in once ≥ 20 other-page posts exist; text scored against 40 reference descriptions; LAION aesthetic "audience appeal"; ridge regression for likes (model chosen by cross-validation); UMAP style map. Retrains on every import and daily. |
 | Visualization | `frontend/src/pages` | Result (gauge, reasons, feature strips, palettes, nearest posts), Team style (model health, style map, palette, ranges, trend, what gets likes) |
 | App | `frontend/` (React + Vite + Recharts) | Check my idea, Result, History (record seniors' decisions), Team setup, Plugins |
 | Developer API | `main.py`, `/docs`, `/openapi.json` | REST + OpenAPI 3; plugins register a webhook and return a `Panel` that we draw inside our pages |
 
-Real rejected drafts are never trained on; they only test the model (shown as "real rejected drafts caught").
+Rejected drafts and accepted designs only train the approval model (validated leaving one project out); the on-brand
+score never trains on them. The first run of text detection downloads EasyOCR's detector (~80 MB) once.
 
 ## Plugins (for cross-dev teams)
 
@@ -72,5 +86,5 @@ Tests use a stand-in for CLIP (`VIBE_FAKE_CLIP=1`) and synthetic posters, so the
 
 ## Third-party
 
-CLIP weights (OpenAI, via open_clip), PyTorch, FastAPI, SQLAlchemy, scikit-learn, OpenCV, Pillow, UMAP, Instaloader
+CLIP weights (OpenAI, via open_clip), EasyOCR (CRAFT text detector), LAION aesthetic predictor, PyTorch, FastAPI, SQLAlchemy, scikit-learn, OpenCV, Pillow, UMAP, Instaloader
 (downloading Instagram is against Instagram's terms; used at small scale for a course project), APScheduler, React, Vite, Recharts.

@@ -1,12 +1,85 @@
 # Known issues and improvements
 
-Honest status as of 11 Nov 2026. Everything below was found by running the app on real data:
+Honest status as of 12 Nov 2026. Everything below was found by running the app on real data:
 74 posts from one fest's Instagram page (Mar–Nov 2026) and 9 drafts of one talk poster that the design
 team rejected, plus 2 posters the team accepted.
 
 **Short version:** the pipeline, API, plugins and dashboards work end to end. The model does **not** yet do
 the one thing the product promises: it cannot tell a poster the team will accept from one it will reject.
 The cause is data, not code, and the fix is listed under "Improvements".
+
+## 0. Model v2 (12 Nov 2026): what changed and what it achieved
+
+Rejected drafts are scarce (a real constraint), so v2 stops trying to learn "accepted vs rejected" and
+measures **on-brand against the team's own posts**, which needs only approved posts:
+
+- **On-brand score = percentile among the team's own posts**, from two signals: overall look (CLIP, ignoring each
+  post's near-twins so series posts don't inflate the reference) and **colour match against the 8 past posts on the
+  most similar topic** (Lab histogram). The classifier is only used once ≥ 20 other-page posts exist (F2).
+- **Verdict wording** changed from "Likely approved / sent back" to **On-brand / Borderline / Off-brand**.
+- **Audience appeal** (LAION aesthetic predictor) added as a separate number. Tested first, see below.
+- **Likes model** now picks between two candidate models by cross-validation.
+
+Experiments behind these choices (team: 74 posts; labelled: 2 accepted one-off posters, 9 rejected drafts):
+
+| Idea tested | Result | Used? |
+|---|---|---|
+| LAION aesthetic score separates accepted from rejected | **No.** Rejected drafts scored 4.9–6.3, accepted 4.0 and 5.5 (it likes ornate "artsy" drafts the seniors turned down) | not for the verdict |
+| LAION aesthetic score vs likes (relative to the month) | Spearman **0.25, p = 0.03** (weak but real) | shown as "audience appeal"; the likes model may use it, but cross-validation kept the CLIP model (error 1.30 vs 1.56) |
+| CLIP similarity, colour layout, light/dark layout, colour histogram vs team | Team-vs-rejected AUC 0.68–0.89, **but both accepted posters ranked as low as the rejects**: these separate routine series posts from one-off posters, not accepted from rejected | no |
+| Colour histogram vs the same-topic past posts | Accepted at 43rd and 15th percentile, rejects mostly ≤ 14th | yes |
+
+**Result of v2 on the labelled posters:** all 9 rejected drafts fall below the on-brand line (scores 0–30, 6 below
+"borderline"). One accepted poster scores 23 (Borderline, above 7 of 9 rejects); the other scores **0**, the same as
+the five lowest rejects. Accepted-vs-rejected AUC ≈ **0.53**: **still a coin flip**. With 2 accepted examples nothing
+here is statistically meaningful, and the colour-match idea was picked after looking at these same 11 posters, so its
+apparent edge is likely optimistic.
+
+What v2 does fix: scores now mean something ("more on-brand than X % of the team's posts") instead of the old
+classifier giving every real poster ~0.95, and a new poster is no longer punished for having no twin in a series.
+
+## 0b. Model v3 (12 Nov 2026): bigger models tested, finished designs, learned approval
+
+**Bigger image models did not help.** Each candidate "view" was scored the same way as v2 (percentile among the
+team's own posts, near-twins excluded) and tested on the real labelled designs: does the accepted FinLit final beat
+each of its 9 rejected drafts (same brief, the real use case)?
+
+| View | FinLit final beats drafts | Accepted vs rejected AUC (2 vs 9) | Used? |
+|---|---|---|---|
+| CLIP ViT-B/32 look (v1) | 2 / 9 | 0.33 | inside v2 |
+| Colour vs same-topic posts (v2) | 6 / 9 | 0.72 | yes |
+| v2 combined (CLIP look + colour) | 5 / 9 | 0.67 | yes (current) |
+| DINOv2-small / base look (stronger self-supervised model) | 5 / 9 | 0.28 | no |
+| DINOv2-base vs same-topic posts | 8 / 9 | 0.44 (Pandiya at 15th pct) | no |
+| Typography from OCR text boxes, vs same-topic posts | 4 / 9 | 0.22 | no (used for finish checks) |
+| Colour layout 6x8 vs same-topic posts | 2 / 9 | 0.33 | no |
+| DINOv2 + colour + typography (averaged) | 4-6 / 9 | 0.31-0.47 | no |
+
+None beats v2 on accepted-vs-rejected, and 11 labelled designs (2 accepted) cannot tell real gains from noise.
+**The limit is labels, not model size**, so v3 builds the path for labels instead:
+
+- **Finished designs can be checked** (`kind=final`, one image): on-brand score of the design itself, plus a
+  **finish checklist** from text detection (EasyOCR's CRAFT detector): headline legibility (WCAG contrast),
+  share of low-contrast text, amount of text, headline size, resolution, shape. Optional link to the plan check
+  ("plan vs final": score change and how close the final stayed to the inspiration).
+- **Every check is calibrated on the team's own posts.** With fixed rules, the first version flagged most of the
+  team's approved posts: low contrast on 72 %, small text on 54 %, text near the edge on 58 %. Small-text and edge
+  checks were dropped (fine print at the edges is this team's style; the detector can't see text below ~1 % of the
+  height). Now each check fires on 10-17 % of approved team posts. They fire on 0-22 % of the rejected drafts, so
+  **they are a readiness checklist, not an approval predictor**, and they do not change the score.
+- **Approval model**: logistic regression on 15 readable inputs (on-brand parts, distance from the team's usual style
+  and typography, appeal), trained only on designs with a known decision (`decision` = accepted/rejected, grouped by
+  `project`). Validated leaving out one whole project at a time; used only with >= 8 accepted, >= 8 rejected, >= 3
+  projects and AUC >= 0.60, then blended into final-design scores by its AUC (at most 60 %). Instagram posts alone
+  never train it (they caused the series-vs-one-off problem, F1/F4).
+  **Status on the real data: off** (2 accepted, 9 rejected, 2 projects; needs 6 more accepted and 1 more project).
+  Tested on synthetic data, where it switches on and gets AUC >= 0.8.
+- **Decisions are now data**: marking a final check approved/rejected stores that exact image with its decision and
+  project; Team setup can upload "designs the seniors accepted" and rejected drafts with a project name.
+- **Confidence** on every result: low when the team has posted little like the design (looks-like < 10th pct)
+  or the model knows < 30 posts; the final-design result says when the approval model is not trained yet.
+- **Honest metric on the Team style page**: of the 9 same-project accepted-vs-rejected pairs, the on-brand score
+  ranks the accepted design higher in **56 %** (50 % = guessing).
 
 ---
 
@@ -22,7 +95,7 @@ The cause is data, not code, and the fix is listed under "Improvements".
 
 Neither signal separates the two groups. A designer would get "Borderline" for both a winner and a reject.
 
-### F2. The classifier learned "is this a clean, finished poster?", not "is this our style?"
+### F2. The classifier learned "is this a clean, finished poster?", not "is this our style?" (mitigated in v2: not used without ≥ 20 other-page posts)
 
 With no posts from other pages, the only negatives are near-misses (deliberately broken copies of team posts).
 So the classifier learns to spot breakage. Every real poster, accepted or rejected, passes.
@@ -49,7 +122,7 @@ poster that was in the training set scored 57 ("Likely sent back") because of it
 **Fix applied:** near-misses with similarity > 0.85 to their original are dropped (`NEAR_MISS_MAX_SIM`).
 That removed 47 of 74, leaving 27 negatives, which is too few.
 
-### F4. Similarity percentile is unfair to genuinely new posters
+### F4. Similarity percentile is unfair to genuinely new posters (mitigated in v2: near-twins are ignored)
 
 Team posts come in series (same template, same event, carousel-like sets). Each past post has a near-twin,
 so "how close is a team post to the rest" is high. A new poster never has a twin, so it lands at the 10th
@@ -65,10 +138,16 @@ The first versions reported hold-out AUC 0.87–0.91 and "8 of 8 rejected drafts
 near-misses the honest hold-out AUC is **0.71**, and the rejected drafts score 66–73 against 71–78 for accepted posters.
 The test split is also tiny (≈14 team posts), so any single number has a wide error bar.
 
-### F6. The "likely approved" line is not calibrated to approval
+### F6. The verdict line is not calibrated to approval
 
-The line comes from Youden's J on team posts vs near-misses, then is clipped to 30–85. It currently sits at the
-85 cap. It says nothing about what the seniors actually approve.
+In v2 (no other pages) the lines are fixed percentiles: 30+ on-brand, 12–29 borderline. With other pages they come
+from Youden's J on held-out posts. Neither says anything about what the seniors actually approve.
+
+### F6b. Some accepted one-off posters score Off-brand
+
+A poster that breaks the team's colour habits on purpose (the accepted talk poster's bright blue/purple block) gets
+a low on-brand score even when the seniors liked it. "On-brand" measures sameness, and good design sometimes isn't.
+The UI tells designers this ("normal for a new kind of poster, check the closest posts"), but the score itself can't.
 
 ### F7. ~~Bug: the description has no effect when there are no other pages~~ (fixed)
 
@@ -92,7 +171,7 @@ are any). No hand-tuned scale, and it works with or without other pages. Covered
 **Still open:** CLIP reads text inside images, so naming the fest in the description probably inflates the score.
 The 40 reference descriptions were written by hand; a better reference set would come from real briefs.
 
-### F8. Two "style features" are guesses
+### F8. Two "style features" are guesses (text detection now exists, see 0b, but `text_amount` still uses CLIP)
 
 `text_amount` and `illustration` come from CLIP zero-shot prompts, not OCR or a trained detector. They are
 uncalibrated, and the reasons that quote them ("yours 30, usual 30–41") can be wrong. `busyness` and `whitespace`

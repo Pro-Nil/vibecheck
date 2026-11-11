@@ -1,0 +1,688 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>VibeCheck API</title><style>
+:root{--bg:#f7f6f2;--surface:#fff;--s2:#efeee9;--text:#1b1d21;--t2:#565b64;--border:#dcdad3;--accent:#0b63a5;
+--get:#0b63a5;--post:#1d7a4f;--patch:#8a5a00;--delete:#b03a1a;color-scheme:light}
+@media (prefers-color-scheme:dark){:root{--bg:#15171b;--surface:#1d2025;--s2:#262a30;--text:#eceae4;--t2:#a9adb5;
+--border:#353a42;--accent:#6cb6ec;--get:#6cb6ec;--post:#5fd39a;--patch:#e5b552;--delete:#ff8a66;color-scheme:dark}}
+*{box-sizing:border-box}html{scroll-behavior:smooth}
+body{margin:0;background:var(--bg);color:var(--text);font:15px/1.55 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+a{color:var(--accent)}code,pre{font-family:ui-monospace,SFMono-Regular,Consolas,monospace;font-size:.88em}
+.wrap{display:grid;grid-template-columns:290px minmax(0,1fr);max-width:1240px;margin:0 auto}
+nav{position:sticky;top:0;height:100vh;overflow:auto;padding:20px 12px 40px;border-right:1px solid var(--border)}
+nav ul{list-style:none;margin:0;padding:0}nav li a{display:block;padding:3px 8px;border-radius:6px;text-decoration:none;
+color:var(--text);font-size:.83rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}nav li a:hover{background:var(--s2)}
+.navtag{margin:14px 8px 4px;font-weight:700;font-size:.75rem;letter-spacing:.06em;text-transform:uppercase;color:var(--t2)}
+main{padding:28px 32px 80px;min-width:0}h1{font-size:2rem;margin:0 0 4px}h2{margin:44px 0 6px;font-size:1.45rem;
+padding-top:8px;border-top:1px solid var(--border)}h3{margin:0 0 4px;font-size:1.05rem}h4{margin:16px 0 6px;font-size:.85rem;
+text-transform:uppercase;letter-spacing:.05em;color:var(--t2)}
+.op{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:16px 18px;margin:14px 0}
+.summary{margin:2px 0 8px;color:var(--t2)}.muted{color:var(--t2)}
+.m{display:inline-block;min-width:58px;text-align:center;font:700 .72rem/1.9 ui-monospace,monospace;border-radius:6px;
+padding:0 6px;color:#fff;margin-right:6px;vertical-align:1px}
+.m.get{background:var(--get)}.m.post{background:var(--post)}.m.patch{background:var(--patch)}.m.delete{background:var(--delete)}
+@media (prefers-color-scheme:dark){.m{color:#0d0f12}}
+nav .m{min-width:46px;font-size:.62rem;line-height:1.7;margin-right:4px}
+table{width:100%;border-collapse:collapse;margin:4px 0 8px;font-size:.9rem}th,td{text-align:left;padding:6px 8px;
+border-bottom:1px solid var(--border);vertical-align:top}th{color:var(--t2);font-size:.78rem;text-transform:uppercase}
+.req{font-size:.68rem;font-weight:700;color:var(--delete);margin-left:4px}
+pre{background:var(--s2);border:1px solid var(--border);border-radius:8px;padding:12px 14px;overflow:auto;max-height:520px;margin:6px 0 10px}
+.note{background:var(--s2);border-left:4px solid var(--accent);padding:10px 14px;border-radius:6px}
+.steps li{margin:4px 0}.hero p{max-width:75ch}
+.quick{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:12px;margin:16px 0}
+.quick div{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:12px 14px}
+.quick b{display:block;margin-bottom:2px}
+@media (max-width:860px){.wrap{display:block}nav{position:static;height:auto;border-right:0;border-bottom:1px solid var(--border)}
+main{padding:20px 16px 60px}}
+</style></head>
+<body><div class="wrap">
+<nav aria-label="Contents"><ul>
+<li class="navtag">Start</li><li><a href="#top">Overview</a></li><li><a href="#plugins-guide">Build a plugin</a></li>
+<li class="navtag">Checks</li><li><a href="#op-post-teams-team_id-checks"><span class="m post">POST</span> /teams/{team_id}/checks</a></li><li><a href="#op-get-teams-team_id-checks"><span class="m get">GET</span> /teams/{team_id}/checks</a></li><li><a href="#op-get-checks-check_id"><span class="m get">GET</span> /checks/{check_id}</a></li><li><a href="#op-post-checks-check_id-outcome"><span class="m post">POST</span> /checks/{check_id}/outcome</a></li><li class="navtag">Plugins</li><li><a href="#op-post-plugins"><span class="m post">POST</span> /plugins</a></li><li><a href="#op-get-plugins"><span class="m get">GET</span> /plugins</a></li><li><a href="#op-get-plugins-panel-example"><span class="m get">GET</span> /plugins/panel-example</a></li><li><a href="#op-patch-plugins-plugin_id"><span class="m patch">PATCH</span> /plugins/{plugin_id}</a></li><li><a href="#op-delete-plugins-plugin_id"><span class="m delete">DELETE</span> /plugins/{plugin_id}</a></li><li class="navtag">Model</li><li><a href="#op-post-teams-team_id-retrain"><span class="m post">POST</span> /teams/{team_id}/retrain</a></li><li><a href="#op-get-teams-team_id-model"><span class="m get">GET</span> /teams/{team_id}/model</a></li><li><a href="#op-get-teams-team_id-style-profile"><span class="m get">GET</span> /teams/{team_id}/style-profile</a></li><li class="navtag">Data</li><li><a href="#op-post-teams-team_id-import"><span class="m post">POST</span> /teams/{team_id}/import</a></li><li><a href="#op-post-teams-team_id-import-upload"><span class="m post">POST</span> /teams/{team_id}/import/upload</a></li><li><a href="#op-get-jobs-job_id"><span class="m get">GET</span> /jobs/{job_id}</a></li><li><a href="#op-get-teams-team_id-jobs"><span class="m get">GET</span> /teams/{team_id}/jobs</a></li><li><a href="#op-get-teams-team_id-posts"><span class="m get">GET</span> /teams/{team_id}/posts</a></li><li><a href="#op-post-teams-team_id-posts"><span class="m post">POST</span> /teams/{team_id}/posts</a></li><li><a href="#op-get-posts-post_id"><span class="m get">GET</span> /posts/{post_id}</a></li><li><a href="#op-patch-posts-post_id"><span class="m patch">PATCH</span> /posts/{post_id}</a></li><li><a href="#op-post-features"><span class="m post">POST</span> /features</a></li><li class="navtag">Teams</li><li><a href="#op-get-health"><span class="m get">GET</span> /health</a></li><li><a href="#op-get-teams"><span class="m get">GET</span> /teams</a></li><li><a href="#op-post-teams"><span class="m post">POST</span> /teams</a></li><li><a href="#op-get-teams-team_id"><span class="m get">GET</span> /teams/{team_id}</a></li><li><a href="#op-patch-teams-team_id"><span class="m patch">PATCH</span> /teams/{team_id}</a></li><li class="navtag">Schemas</li><li><a href="#schema-Panel">Panel</a></li><li><a href="#schema-PanelMetric">PanelMetric</a></li><li><a href="#schema-PanelItem">PanelItem</a></li><li><a href="#schema-PanelChart">PanelChart</a></li><li><a href="#schema-PanelPoint">PanelPoint</a></li><li><a href="#schema-PluginIn">PluginIn</a></li><li><a href="#schema-PluginPatch">PluginPatch</a></li><li><a href="#schema-TeamIn">TeamIn</a></li><li><a href="#schema-TeamPatch">TeamPatch</a></li><li><a href="#schema-ImportIn">ImportIn</a></li><li><a href="#schema-FolderSpec">FolderSpec</a></li></ul></nav>
+<main id="top">
+<div class="hero">
+<h1>VibeCheck API <span class="muted" style="font-size:1rem">v1.0.0 · OpenAPI 3.1.0</span></h1>
+<p>VibeCheck learns a design team's visual style from its Instagram feed and scores a designer's plan
+(inspiration images + a short description) <b>before</b> they design: a 0–100 vibe-match score, the reasons, and
+the team's closest past posts.</p>
+<p>Plain JSON over HTTP. No authentication yet. Images are uploaded as <code>multipart/form-data</code>.
+In the examples, <code>$API</code> is the server address, e.g. <code>http://localhost:8000</code>
+(run it from <a href="https://github.com/Pro-Nil/vibecheck">github.com/Pro-Nil/vibecheck</a>).
+A live, clickable version of these docs is at <code>$API/docs</code>; the raw spec is at <code>$API/openapi.json</code>.</p>
+</div>
+<div class="quick">
+<div><b>Score a plan</b><code>POST /teams/{id}/checks</code></div>
+<div><b>Team's learned style</b><code>GET /teams/{id}/style-profile</code></div>
+<div><b>Add a plugin</b><code>POST /plugins</code></div>
+<div><b>Features of any image</b><code>POST /features</code></div>
+</div>
+<p class="note">Long jobs (import, retrain) return a <code>job_id</code> at once; poll <code>GET /jobs/{id}</code>
+until <code>status</code> is <code>done</code> or <code>failed</code>. Scores are 0–100; style features are 0–1.
+Errors return <code>{"detail": "…"}</code> with a 4xx code (409 = team has no trained model yet).</p>
+
+<h2 id="plugins-guide">Build a plugin (cross-dev)</h2>
+<p>A plugin is your own small web service with <b>one POST endpoint</b>. It runs <i>inside</i> our app:
+we send it the data, it returns a <a href="#schema-Panel">Panel</a>, and we draw that panel with our own
+components on the Result page (or the Team style page). You do not build a separate app.</p>
+<ol class="steps">
+<li><b>Write the service.</b> Any language; it must answer within <b>5 seconds</b> with Panel JSON.</li>
+<li><b>Register it once:</b> <code>POST /plugins</code> with its URL and where it shows
+(<code>"slot": "result"</code> or <code>"profile"</code>). Or use the Plugins page in the app.</li>
+<li><b>Done.</b> Every new check calls your URL. Errors and timeouts show as a small note, never break the page.</li>
+</ol>
+<h3>What we send you</h3>
+<p><code>check.completed</code> (slot <code>result</code>), after every check:</p>
+<pre><code class="json">{
+  &quot;event&quot;: &quot;check.completed&quot;,
+  &quot;api_base&quot;: &quot;http://&lt;vibecheck-host&gt;:8000&quot;,
+  &quot;team&quot;: {
+    &quot;id&quot;: 1,
+    &quot;name&quot;: &quot;Techkriti Design&quot;,
+    &quot;instagram_handle&quot;: &quot;techkriti.iitk&quot;,
+    &quot;other_pages&quot;: []
+  },
+  &quot;check&quot;: {
+    &quot;id&quot;: 17,
+    &quot;score&quot;: 14.7,
+    &quot;verdict&quot;: &quot;Borderline&quot;,
+    &quot;verdict_level&quot;: &quot;borderline&quot;,
+    &quot;reasons&quot;: [
+      {
+        &quot;ok&quot;: false,
+        &quot;feature&quot;: &quot;looks_like&quot;,
+        &quot;label&quot;: &quot;Overall look&quot;,
+        &quot;deviation&quot;: 0.71,
+        &quot;text&quot;: &quot;Overall look is unlike this team&#x27;s past posts (closer than only 15% of its own posts). Normal for a new kind of poster, so check the closest posts below.&quot;
+      },
+      {
+        &quot;ok&quot;: true,
+        &quot;feature&quot;: &quot;palette&quot;,
+        &quot;label&quot;: &quot;Colour palette&quot;,
+        &quot;deviation&quot;: 0.7,
+        &quot;text&quot;: &quot;Colours sit close to this team&#x27;s signature palette.&quot;
+      },
+      &quot;…&quot;
+    ],
+    &quot;plan_style&quot;: {
+      &quot;brightness&quot;: 0.476,
+      &quot;saturation&quot;: 0.583,
+      &quot;warmth&quot;: 0.293,
+      &quot;text_amount&quot;: 0.494,
+      &quot;busyness&quot;: 0.378,
+      &quot;whitespace&quot;: 0.399,
+      &quot;contrast&quot;: 0.585,
+      &quot;illustration&quot;: 0.697
+    },
+    &quot;plan_palette&quot;: [
+      {
+        &quot;hex&quot;: &quot;#302461&quot;,
+        &quot;share&quot;: 0.447
+      },
+      {
+        &quot;hex&quot;: &quot;#1a1433&quot;,
+        &quot;share&quot;: 0.194
+      },
+      {
+        &quot;hex&quot;: &quot;#7363e4&quot;,
+        &quot;share&quot;: 0.153
+      },
+      &quot;…&quot;
+    ],
+    &quot;description&quot;: &quot;&quot;,
+    &quot;nearest&quot;: [
+      {
+        &quot;id&quot;: 64,
+        &quot;team_id&quot;: 1,
+        &quot;label&quot;: &quot;team&quot;,
+        &quot;source_page&quot;: &quot;techkriti.iitk&quot;,
+        &quot;image_url&quot;: &quot;/media/images/team_1/team/techkriti.iitk/DeI4gT9…&quot;,
+        &quot;caption&quot;: &quot;SIP &gt; FOMO. \n\nYour first salary, your first SIP,…&quot;,
+        &quot;posted_at&quot;: &quot;2026-10-06T04:04:18&quot;,
+        &quot;likes&quot;: 133,
+        &quot;comments&quot;: 35,
+        &quot;decision&quot;: &quot;accepted&quot;,
+        &quot;project&quot;: &quot;finlit-talk&quot;,
+        &quot;similarity&quot;: 0.732
+      },
+      &quot;…&quot;
+    ],
+    &quot;engagement&quot;: {
+      &quot;band&quot;: &quot;Below usual&quot;,
+      &quot;predicted_vs_usual&quot;: 0.55
+    },
+    &quot;inspo_urls&quot;: [
+      &quot;http://&lt;vibecheck-host&gt;:8000/media/uploads/check_ab12/0_inspo.jpg&quot;
+    ]
+  }
+}</code></pre>
+<p><code>profile.viewed</code> (slot <code>profile</code>) sends <code>team</code> and
+<code>profile</code> {ranges, signature_palette, thresholds, trend} instead of <code>check</code>.
+Use <code>api_base</code> to call any endpoint below for more data (posts, features, style profile).</p>
+<h3>What you send back</h3>
+<p>A <a href="#schema-Panel">Panel</a>. Only <code>title</code> is required.</p>
+<pre><code class="json">{
+  &quot;title&quot;: &quot;Readability&quot;,
+  &quot;summary&quot;: &quot;Contrast of your main colours.&quot;,
+  &quot;metrics&quot;: [
+    {
+      &quot;label&quot;: &quot;Best contrast&quot;,
+      &quot;value&quot;: 5.2,
+      &quot;unit&quot;: &quot;:1&quot;
+    }
+  ],
+  &quot;items&quot;: [
+    {
+      &quot;text&quot;: &quot;Passes the 4.5:1 rule for small text.&quot;,
+      &quot;ok&quot;: true
+    }
+  ],
+  &quot;chart&quot;: {
+    &quot;type&quot;: &quot;bar&quot;,
+    &quot;title&quot;: &quot;Contrast with background&quot;,
+    &quot;points&quot;: [
+      {
+        &quot;label&quot;: &quot;#ffffff&quot;,
+        &quot;value&quot;: 5.2
+      },
+      {
+        &quot;label&quot;: &quot;#ffcc00&quot;,
+        &quot;value&quot;: 2.1
+      }
+    ]
+  }
+}</code></pre>
+<h3>Minimal plugin (Python)</h3>
+<pre><code class="py"># my_plugin.py  -&gt;  run:  uvicorn my_plugin:app --port 8100
+from fastapi import FastAPI
+
+app = FastAPI()
+
+@app.post(&quot;/hook&quot;)
+def hook(event: dict):
+    check = event.get(&quot;check&quot;, {})          # for event == &quot;check.completed&quot;
+    palette = check.get(&quot;plan_palette&quot;, [])
+    # ... your own data + model here ...
+    return {
+        &quot;title&quot;: &quot;My plugin&quot;,
+        &quot;summary&quot;: &quot;One line about what this panel shows.&quot;,
+        &quot;metrics&quot;: [{&quot;label&quot;: &quot;Colours used&quot;, &quot;value&quot;: len(palette)}],
+        &quot;items&quot;: [{&quot;ok&quot;: True, &quot;text&quot;: &quot;Something that fits.&quot;},
+                  {&quot;ok&quot;: False, &quot;text&quot;: &quot;Something to fix.&quot;}],
+        &quot;chart&quot;: {&quot;type&quot;: &quot;bar&quot;, &quot;title&quot;: &quot;Share of each colour&quot;, &quot;y_label&quot;: &quot;%&quot;,
+                  &quot;points&quot;: [{&quot;label&quot;: c[&quot;hex&quot;], &quot;value&quot;: round(100 * c[&quot;share&quot;])}
+                             for c in palette if isinstance(c, dict)]},
+    }</code></pre>
+<p>Full working example: <code>plugins/contrast_checker/app.py</code> in the repo
+(<a href="https://github.com/Pro-Nil/vibecheck">github.com/Pro-Nil/vibecheck</a>).</p>
+<p class="note"><b>Course rule:</b> a cross-dev plugin needs its own data, adaptive and visualization parts.
+Data: what we send plus anything you fetch. Adaptive: your model or rules. Visualization: the Panel's chart,
+metrics and items.</p>
+
+<h2 id="tag-checks">Checks</h2><p class="muted">Score a designer&#x27;s plan (the main call).</p><section class="op" id="op-post-teams-team_id-checks"><h3><span class="m post">POST</span> <code>/teams/{team_id}/checks</code></h3><p class="summary">Score a plan (1-5 inspiration images and/or a description) or a finished design (kind=final, 1 image)</p><h4>Parameters</h4><table><thead><tr><th>Name</th><th>In</th><th>Type</th><th>Description</th></tr></thead><tbody><tr><td><code>team_id</code> <span class=req>required</span></td><td>path</td><td>integer</td><td></td></tr></tbody></table><h4>Form fields (multipart/form-data)</h4><table><thead><tr><th>Field</th><th>Type</th><th>Description</th></tr></thead><tbody><tr><td><code>images</code></td><td>array of file</td><td>1-5 inspiration images (JPG, PNG or WebP, up to 15 MB each). Repeat the field once per image.</td></tr><tr><td><code>description</code></td><td>string</td><td>What you plan to make: colours, layout, fonts, photo or illustration. Send images, a description, or both.</td></tr><tr><td><code>user</code></td><td>string</td><td>Who is checking (optional, shown in History).</td></tr><tr><td><code>kind</code></td><td>string</td><td>plan = inspiration before designing; final = your finished design (exactly 1 image): adds finish checks (legibility, text size, edges, resolution) and the learned approval model. Default: <code>&quot;plan&quot;</code>.</td></tr><tr><td><code>plan_check_id</code></td><td>integer | null</td><td>For kind=final: the plan check this design came from, to compare the final with its plan.</td></tr><tr><td><code>project</code></td><td>string</td><td>Which brief/project this is for (optional). Lets decisions on versions of one brief train the approval model.</td></tr></tbody></table><h4>Example request</h4><pre><code class="sh">curl -X POST $API/teams/1/checks \
+  -F &quot;images=@inspo1.jpg&quot; -F &quot;images=@inspo2.png&quot; \
+  -F &quot;description=dark background, neon green code text, big bold title&quot; -F &quot;user=asha&quot; </code></pre><h4>Responses</h4><p><code>201</code> Successful Response, <code>422</code> Validation Error</p><h4>Example response</h4><pre><code class="json">{
+  &quot;id&quot;: 17,
+  &quot;team_id&quot;: 1,
+  &quot;score&quot;: 14.7,
+  &quot;verdict&quot;: &quot;Borderline&quot;,
+  &quot;verdict_level&quot;: &quot;borderline&quot;,
+  &quot;thresholds&quot;: {
+    &quot;approve&quot;: 30.0,
+    &quot;borderline&quot;: 12.0
+  },
+  &quot;weights&quot;: {
+    &quot;classifier&quot;: 0.0,
+    &quot;on_brand&quot;: 1.0
+  },
+  &quot;components&quot;: {
+    &quot;looks_like&quot;: 0.147,
+    &quot;colour_match&quot;: 0.333,
+    &quot;on_brand&quot;: 0.147,
+    &quot;image_score&quot;: 14.7
+  },
+  &quot;reasons&quot;: [
+    {
+      &quot;ok&quot;: false,
+      &quot;feature&quot;: &quot;looks_like&quot;,
+      &quot;label&quot;: &quot;Overall look&quot;,
+      &quot;deviation&quot;: 0.71,
+      &quot;text&quot;: &quot;Overall look is unlike this team&#x27;s past posts (closer than only 15% of its own posts). Normal for a new kind of poster, so check the closest posts below.&quot;
+    },
+    {
+      &quot;ok&quot;: true,
+      &quot;feature&quot;: &quot;palette&quot;,
+      &quot;label&quot;: &quot;Colour palette&quot;,
+      &quot;deviation&quot;: 0.7,
+      &quot;text&quot;: &quot;Colours sit close to this team&#x27;s signature palette.&quot;
+    },
+    &quot;…&quot;
+  ],
+  &quot;plan_style&quot;: {
+    &quot;brightness&quot;: 0.476,
+    &quot;saturation&quot;: 0.583,
+    &quot;warmth&quot;: 0.293,
+    &quot;text_amount&quot;: 0.494,
+    &quot;busyness&quot;: 0.378,
+    &quot;whitespace&quot;: 0.399,
+    &quot;contrast&quot;: 0.585,
+    &quot;illustration&quot;: 0.697
+  },
+  &quot;plan_palette&quot;: [
+    {
+      &quot;hex&quot;: &quot;#302461&quot;,
+      &quot;share&quot;: 0.447
+    },
+    {
+      &quot;hex&quot;: &quot;#1a1433&quot;,
+      &quot;share&quot;: 0.194
+    },
+    {
+      &quot;hex&quot;: &quot;#7363e4&quot;,
+      &quot;share&quot;: 0.153
+    },
+    &quot;…&quot;
+  ],
+  &quot;nearest&quot;: [
+    {
+      &quot;id&quot;: 64,
+      &quot;team_id&quot;: 1,
+      &quot;label&quot;: &quot;team&quot;,
+      &quot;source_page&quot;: &quot;techkriti.iitk&quot;,
+      &quot;image_url&quot;: &quot;/media/images/team_1/team/techkriti.iitk/DeI4gT9…&quot;,
+      &quot;caption&quot;: &quot;SIP &gt; FOMO. \n\nYour first salary, your first SIP,…&quot;,
+      &quot;posted_at&quot;: &quot;2026-10-06T04:04:18&quot;,
+      &quot;likes&quot;: 133,
+      &quot;comments&quot;: 35,
+      &quot;decision&quot;: &quot;accepted&quot;,
+      &quot;project&quot;: &quot;finlit-talk&quot;,
+      &quot;similarity&quot;: 0.732
+    },
+    &quot;…&quot;
+  ],
+  &quot;engagement&quot;: {
+    &quot;band&quot;: &quot;Below usual&quot;,
+    &quot;predicted_vs_usual&quot;: 0.55
+  },
+  &quot;map_point&quot;: [
+    19.32063102722168,
+    12.287261009216309
+  ],
+  &quot;description&quot;: &quot;&quot;,
+  &quot;inspo_urls&quot;: [
+    &quot;/media/uploads/check_ce98af127cfa/0_finlit_G_glass.jpg&quot;
+  ],
+  &quot;plugins&quot;: [],
+  &quot;model_version&quot;: 7,
+  &quot;created_at&quot;: &quot;2026-11-11T21:57:18.745589&quot;,
+  &quot;outcome&quot;: null,
+  &quot;signature_palette&quot;: [
+    {
+      &quot;hex&quot;: &quot;#1f1922&quot;,
+      &quot;share&quot;: 0.36512021763191926
+    },
+    {
+      &quot;hex&quot;: &quot;#cacaca&quot;,
+      &quot;share&quot;: 0.23223406099561272
+    },
+    &quot;…&quot;
+  ],
+  &quot;ranges&quot;: {
+    &quot;brightness&quot;: {
+      &quot;label&quot;: &quot;Brightness&quot;,
+      &quot;p10&quot;: 0.2500830888748169,
+      &quot;p50&quot;: 0.4677785634994507,
+      &quot;p90&quot;: 0.7024307250976562,
+      &quot;other_p50&quot;: null
+    },
+    &quot;…&quot;: &quot;one entry per style feature&quot;
+  }
+}</code></pre></section><section class="op" id="op-get-teams-team_id-checks"><h3><span class="m get">GET</span> <code>/teams/{team_id}/checks</code></h3><p class="summary">List Checks</p><h4>Parameters</h4><table><thead><tr><th>Name</th><th>In</th><th>Type</th><th>Description</th></tr></thead><tbody><tr><td><code>team_id</code> <span class=req>required</span></td><td>path</td><td>integer</td><td></td></tr><tr><td><code>limit</code></td><td>query</td><td>integer</td><td> Default: <code>50</code>. Max 500.</td></tr></tbody></table><h4>Responses</h4><p><code>200</code> Successful Response, <code>422</code> Validation Error</p></section><section class="op" id="op-get-checks-check_id"><h3><span class="m get">GET</span> <code>/checks/{check_id}</code></h3><p class="summary">Get Check</p><h4>Parameters</h4><table><thead><tr><th>Name</th><th>In</th><th>Type</th><th>Description</th></tr></thead><tbody><tr><td><code>check_id</code> <span class=req>required</span></td><td>path</td><td>integer</td><td></td></tr></tbody></table><h4>Responses</h4><p><code>200</code> Successful Response, <code>422</code> Validation Error</p><h4>Example response</h4><pre><code class="json">{
+  &quot;id&quot;: 17,
+  &quot;team_id&quot;: 1,
+  &quot;score&quot;: 14.7,
+  &quot;verdict&quot;: &quot;Borderline&quot;,
+  &quot;verdict_level&quot;: &quot;borderline&quot;,
+  &quot;thresholds&quot;: {
+    &quot;approve&quot;: 30.0,
+    &quot;borderline&quot;: 12.0
+  },
+  &quot;weights&quot;: {
+    &quot;classifier&quot;: 0.0,
+    &quot;on_brand&quot;: 1.0
+  },
+  &quot;components&quot;: {
+    &quot;looks_like&quot;: 0.147,
+    &quot;colour_match&quot;: 0.333,
+    &quot;on_brand&quot;: 0.147,
+    &quot;image_score&quot;: 14.7
+  },
+  &quot;reasons&quot;: [
+    {
+      &quot;ok&quot;: false,
+      &quot;feature&quot;: &quot;looks_like&quot;,
+      &quot;label&quot;: &quot;Overall look&quot;,
+      &quot;deviation&quot;: 0.71,
+      &quot;text&quot;: &quot;Overall look is unlike this team&#x27;s past posts (closer than only 15% of its own posts). Normal for a new kind of poster, so check the closest posts below.&quot;
+    },
+    {
+      &quot;ok&quot;: true,
+      &quot;feature&quot;: &quot;palette&quot;,
+      &quot;label&quot;: &quot;Colour palette&quot;,
+      &quot;deviation&quot;: 0.7,
+      &quot;text&quot;: &quot;Colours sit close to this team&#x27;s signature palette.&quot;
+    },
+    &quot;…&quot;
+  ],
+  &quot;plan_style&quot;: {
+    &quot;brightness&quot;: 0.476,
+    &quot;saturation&quot;: 0.583,
+    &quot;warmth&quot;: 0.293,
+    &quot;text_amount&quot;: 0.494,
+    &quot;busyness&quot;: 0.378,
+    &quot;whitespace&quot;: 0.399,
+    &quot;contrast&quot;: 0.585,
+    &quot;illustration&quot;: 0.697
+  },
+  &quot;plan_palette&quot;: [
+    {
+      &quot;hex&quot;: &quot;#302461&quot;,
+      &quot;share&quot;: 0.447
+    },
+    {
+      &quot;hex&quot;: &quot;#1a1433&quot;,
+      &quot;share&quot;: 0.194
+    },
+    {
+      &quot;hex&quot;: &quot;#7363e4&quot;,
+      &quot;share&quot;: 0.153
+    },
+    &quot;…&quot;
+  ],
+  &quot;nearest&quot;: [
+    {
+      &quot;id&quot;: 64,
+      &quot;team_id&quot;: 1,
+      &quot;label&quot;: &quot;team&quot;,
+      &quot;source_page&quot;: &quot;techkriti.iitk&quot;,
+      &quot;image_url&quot;: &quot;/media/images/team_1/team/techkriti.iitk/DeI4gT9…&quot;,
+      &quot;caption&quot;: &quot;SIP &gt; FOMO. \n\nYour first salary, your first SIP,…&quot;,
+      &quot;posted_at&quot;: &quot;2026-10-06T04:04:18&quot;,
+      &quot;likes&quot;: 133,
+      &quot;comments&quot;: 35,
+      &quot;decision&quot;: &quot;accepted&quot;,
+      &quot;project&quot;: &quot;finlit-talk&quot;,
+      &quot;similarity&quot;: 0.732
+    },
+    &quot;…&quot;
+  ],
+  &quot;engagement&quot;: {
+    &quot;band&quot;: &quot;Below usual&quot;,
+    &quot;predicted_vs_usual&quot;: 0.55
+  },
+  &quot;map_point&quot;: [
+    19.32063102722168,
+    12.287261009216309
+  ],
+  &quot;description&quot;: &quot;&quot;,
+  &quot;inspo_urls&quot;: [
+    &quot;/media/uploads/check_ce98af127cfa/0_finlit_G_glass.jpg&quot;
+  ],
+  &quot;plugins&quot;: [],
+  &quot;model_version&quot;: 7,
+  &quot;created_at&quot;: &quot;2026-11-11T21:57:18.745589&quot;,
+  &quot;outcome&quot;: null,
+  &quot;signature_palette&quot;: [
+    {
+      &quot;hex&quot;: &quot;#1f1922&quot;,
+      &quot;share&quot;: 0.36512021763191926
+    },
+    {
+      &quot;hex&quot;: &quot;#cacaca&quot;,
+      &quot;share&quot;: 0.23223406099561272
+    },
+    &quot;…&quot;
+  ],
+  &quot;ranges&quot;: {
+    &quot;brightness&quot;: {
+      &quot;label&quot;: &quot;Brightness&quot;,
+      &quot;p10&quot;: 0.2500830888748169,
+      &quot;p50&quot;: 0.4677785634994507,
+      &quot;p90&quot;: 0.7024307250976562,
+      &quot;other_p50&quot;: null
+    },
+    &quot;…&quot;: &quot;one entry per style feature&quot;
+  }
+}</code></pre></section><section class="op" id="op-post-checks-check_id-outcome"><h3><span class="m post">POST</span> <code>/checks/{check_id}/outcome</code></h3><p class="summary">Record what the seniors decided; with a final image it becomes training data</p><h4>Parameters</h4><table><thead><tr><th>Name</th><th>In</th><th>Type</th><th>Description</th></tr></thead><tbody><tr><td><code>check_id</code> <span class=req>required</span></td><td>path</td><td>integer</td><td></td></tr></tbody></table><h4>Form fields (multipart/form-data)</h4><table><thead><tr><th>Field</th><th>Type</th><th>Description</th></tr></thead><tbody><tr><td><code>result</code> <span class=req>required</span></td><td>string</td><td></td></tr><tr><td><code>final_image</code></td><td>file | null</td><td></td></tr></tbody></table><h4>Example request</h4><pre><code class="sh">curl -X POST $API/checks/12/outcome -F &quot;result=approved&quot; -F &quot;final_image=@final.jpg&quot; </code></pre><h4>Responses</h4><p><code>200</code> Successful Response, <code>422</code> Validation Error</p></section><h2 id="tag-plugins">Plugins</h2><p class="muted">Register another team&#x27;s service to add panels inside the app.</p><section class="op" id="op-post-plugins"><h3><span class="m post">POST</span> <code>/plugins</code></h3><p class="summary">Register Plugin</p><h4>JSON body</h4><table><thead><tr><th>Field</th><th>Type</th><th>Description</th></tr></thead><tbody><tr><td><code>name</code> <span class=req>required</span></td><td>string</td><td> Example: <code>&quot;Contrast checker&quot;</code>.</td></tr><tr><td><code>url</code> <span class=req>required</span></td><td>string</td><td>We POST each event here and expect a Panel back within 5 seconds. Example: <code>&quot;http://localhost:8100/hook&quot;</code>.</td></tr><tr><td><code>slot</code></td><td><code>&quot;result&quot;</code> | <code>&quot;profile&quot;</code></td><td>Where the panel shows. Default: <code>&quot;result&quot;</code>.</td></tr><tr><td><code>description</code></td><td>string</td><td></td></tr><tr><td><code>author_team</code></td><td>string</td><td></td></tr><tr><td><code>team_id</code></td><td>integer | null</td><td>Only for this team; empty = every team.</td></tr></tbody></table><h4>Example request</h4><pre><code class="sh">curl -X POST $API/plugins -H &quot;Content-Type: application/json&quot; \
+  -d &#x27;{&quot;name&quot;: &quot;Font matcher&quot;, &quot;url&quot;: &quot;http://your-host:8100/hook&quot;, &quot;slot&quot;: &quot;result&quot;, &quot;author_team&quot;: &quot;Team 7&quot;}&#x27;</code></pre><h4>Responses</h4><p><code>201</code> Successful Response, <code>422</code> Validation Error</p></section><section class="op" id="op-get-plugins"><h3><span class="m get">GET</span> <code>/plugins</code></h3><p class="summary">List Plugins</p><h4>Parameters</h4><table><thead><tr><th>Name</th><th>In</th><th>Type</th><th>Description</th></tr></thead><tbody><tr><td><code>team_id</code></td><td>query</td><td>integer | null</td><td></td></tr></tbody></table><h4>Responses</h4><p><code>200</code> Successful Response, <code>422</code> Validation Error</p></section><section class="op" id="op-get-plugins-panel-example"><h3><span class="m get">GET</span> <code>/plugins/panel-example</code></h3><p class="summary">An example of the Panel JSON your plugin must return</p><h4>Responses</h4><p><code>200</code> Successful Response</p><h4>Example response</h4><pre><code class="json">{
+  &quot;title&quot;: &quot;Readability&quot;,
+  &quot;summary&quot;: &quot;Contrast of your main colours.&quot;,
+  &quot;metrics&quot;: [
+    {
+      &quot;label&quot;: &quot;Best contrast&quot;,
+      &quot;value&quot;: 5.2,
+      &quot;unit&quot;: &quot;:1&quot;
+    }
+  ],
+  &quot;items&quot;: [
+    {
+      &quot;text&quot;: &quot;Passes the 4.5:1 rule for small text.&quot;,
+      &quot;ok&quot;: true
+    }
+  ],
+  &quot;chart&quot;: {
+    &quot;type&quot;: &quot;bar&quot;,
+    &quot;title&quot;: &quot;Contrast with background&quot;,
+    &quot;points&quot;: [
+      {
+        &quot;label&quot;: &quot;#ffffff&quot;,
+        &quot;value&quot;: 5.2
+      },
+      {
+        &quot;label&quot;: &quot;#ffcc00&quot;,
+        &quot;value&quot;: 2.1
+      }
+    ]
+  }
+}</code></pre></section><section class="op" id="op-patch-plugins-plugin_id"><h3><span class="m patch">PATCH</span> <code>/plugins/{plugin_id}</code></h3><p class="summary">Patch Plugin</p><h4>Parameters</h4><table><thead><tr><th>Name</th><th>In</th><th>Type</th><th>Description</th></tr></thead><tbody><tr><td><code>plugin_id</code> <span class=req>required</span></td><td>path</td><td>integer</td><td></td></tr></tbody></table><h4>JSON body</h4><table><thead><tr><th>Field</th><th>Type</th><th>Description</th></tr></thead><tbody><tr><td><code>enabled</code></td><td>boolean | null</td><td></td></tr><tr><td><code>url</code></td><td>string | null</td><td></td></tr><tr><td><code>name</code></td><td>string | null</td><td></td></tr></tbody></table><h4>Responses</h4><p><code>200</code> Successful Response, <code>422</code> Validation Error</p></section><section class="op" id="op-delete-plugins-plugin_id"><h3><span class="m delete">DELETE</span> <code>/plugins/{plugin_id}</code></h3><p class="summary">Delete Plugin</p><h4>Parameters</h4><table><thead><tr><th>Name</th><th>In</th><th>Type</th><th>Description</th></tr></thead><tbody><tr><td><code>plugin_id</code> <span class=req>required</span></td><td>path</td><td>integer</td><td></td></tr></tbody></table><h4>Responses</h4><p><code>204</code> Successful Response, <code>422</code> Validation Error</p></section><h2 id="tag-model">Model</h2><p class="muted">Train the vibe model and read its accuracy.</p><section class="op" id="op-post-teams-team_id-retrain"><h3><span class="m post">POST</span> <code>/teams/{team_id}/retrain</code></h3><p class="summary">Retrain</p><h4>Parameters</h4><table><thead><tr><th>Name</th><th>In</th><th>Type</th><th>Description</th></tr></thead><tbody><tr><td><code>team_id</code> <span class=req>required</span></td><td>path</td><td>integer</td><td></td></tr></tbody></table><h4>Responses</h4><p><code>202</code> Successful Response, <code>422</code> Validation Error</p><h4>Example response</h4><pre><code class="json">{
+  &quot;job_id&quot;: 8
+}</code></pre></section><section class="op" id="op-get-teams-team_id-model"><h3><span class="m get">GET</span> <code>/teams/{team_id}/model</code></h3><p class="summary">Current model, its accuracy, and history</p><h4>Parameters</h4><table><thead><tr><th>Name</th><th>In</th><th>Type</th><th>Description</th></tr></thead><tbody><tr><td><code>team_id</code> <span class=req>required</span></td><td>path</td><td>integer</td><td></td></tr></tbody></table><h4>Responses</h4><p><code>200</code> Successful Response, <code>422</code> Validation Error</p><h4>Example response</h4><pre><code class="json">{
+  &quot;current&quot;: {
+    &quot;id&quot;: 7,
+    &quot;team_id&quot;: 1,
+    &quot;trained_at&quot;: &quot;2026-11-11T21:52:16.308699&quot;,
+    &quot;metrics&quot;: {
+      &quot;thresholds&quot;: {
+        &quot;approve&quot;: 30.0,
+        &quot;borderline&quot;: 12.0
+      },
+      &quot;weights&quot;: {
+        &quot;classifier&quot;: 0.0,
+        &quot;on_brand&quot;: 1.0
+      },
+      &quot;…&quot;: &quot;more fields&quot;
+    }
+  },
+  &quot;history&quot;: [
+    {
+      &quot;id&quot;: 7,
+      &quot;trained_at&quot;: &quot;2026-11-11T21:52:16.308699&quot;,
+      &quot;auc&quot;: null
+    },
+    {
+      &quot;id&quot;: 6,
+      &quot;trained_at&quot;: &quot;2026-11-11T21:50:23.781432&quot;,
+      &quot;auc&quot;: null
+    }
+  ]
+}</code></pre></section><section class="op" id="op-get-teams-team_id-style-profile"><h3><span class="m get">GET</span> <code>/teams/{team_id}/style-profile</code></h3><p class="summary">Get Style Profile</p><h4>Parameters</h4><table><thead><tr><th>Name</th><th>In</th><th>Type</th><th>Description</th></tr></thead><tbody><tr><td><code>team_id</code> <span class=req>required</span></td><td>path</td><td>integer</td><td></td></tr><tr><td><code>include_plugins</code></td><td>query</td><td>boolean</td><td> Default: <code>true</code>.</td></tr></tbody></table><h4>Example request</h4><pre><code class="sh">curl $API/teams/1/style-profile</code></pre><h4>Responses</h4><p><code>200</code> Successful Response, <code>422</code> Validation Error</p><h4>Example response</h4><pre><code class="json">{
+  &quot;model_version&quot;: 7,
+  &quot;trained_at&quot;: &quot;2026-11-11T21:52:16.308699&quot;,
+  &quot;thresholds&quot;: {
+    &quot;approve&quot;: 30.0,
+    &quot;borderline&quot;: 12.0
+  },
+  &quot;date_range&quot;: [
+    &quot;2026-03-17T09:18:55&quot;,
+    &quot;2026-11-11T04:39:22&quot;
+  ],
+  &quot;metrics&quot;: {
+    &quot;n_team&quot;: 75,
+    &quot;n_other&quot;: 0,
+    &quot;n_rejected&quot;: 9,
+    &quot;weights&quot;: {
+      &quot;classifier&quot;: 0.0,
+      &quot;on_brand&quot;: 1.0
+    },
+    &quot;…&quot;: &quot;roc, test_scores, real_rejects, engagement&quot;
+  },
+  &quot;ranges&quot;: {
+    &quot;brightness&quot;: {
+      &quot;label&quot;: &quot;Brightness&quot;,
+      &quot;p10&quot;: 0.2500830888748169,
+      &quot;p50&quot;: 0.4677785634994507,
+      &quot;p90&quot;: 0.7024307250976562,
+      &quot;other_p50&quot;: null
+    },
+    &quot;…&quot;: &quot;one entry per style feature&quot;
+  },
+  &quot;signature_palette&quot;: [
+    {
+      &quot;hex&quot;: &quot;#1f1922&quot;,
+      &quot;share&quot;: 0.36512021763191926
+    },
+    {
+      &quot;hex&quot;: &quot;#cacaca&quot;,
+      &quot;share&quot;: 0.23223406099561272
+    },
+    &quot;…&quot;
+  ],
+  &quot;trend&quot;: [
+    {
+      &quot;month&quot;: &quot;2026-03&quot;,
+      &quot;brightness&quot;: 0.467,
+      &quot;saturation&quot;: 0.442,
+      &quot;warmth&quot;: 0.492,
+      &quot;text_amount&quot;: 0.747,
+      &quot;busyness&quot;: 0.742,
+      &quot;whitespace&quot;: 0.136,
+      &quot;contrast&quot;: 0.967,
+      &quot;illustration&quot;: 0.509,
+      &quot;n&quot;: 42
+    },
+    &quot;… one row per month&quot;
+  ],
+  &quot;what_works&quot;: [
+    {
+      &quot;feature&quot;: &quot;contrast&quot;,
+      &quot;label&quot;: &quot;Contrast&quot;,
+      &quot;correlation&quot;: -0.562
+    },
+    {
+      &quot;feature&quot;: &quot;text_amount&quot;,
+      &quot;label&quot;: &quot;Amount of text&quot;,
+      &quot;correlation&quot;: -0.374
+    },
+    &quot;…&quot;
+  ],
+  &quot;map&quot;: [
+    {
+      &quot;post_id&quot;: 1,
+      &quot;x&quot;: 14.252249717712402,
+      &quot;y&quot;: 5.181863784790039,
+      &quot;label&quot;: &quot;team&quot;
+    },
+    {
+      &quot;post_id&quot;: 2,
+      &quot;x&quot;: 14.469036102294922,
+      &quot;y&quot;: 4.339064598083496,
+      &quot;label&quot;: &quot;team&quot;
+    },
+    &quot;… one point per post&quot;
+  ],
+  &quot;plugins&quot;: []
+}</code></pre></section><h2 id="tag-data">Data</h2><p class="muted">Import posts, list posts, run feature extraction.</p><section class="op" id="op-post-teams-team_id-import"><h3><span class="m post">POST</span> <code>/teams/{team_id}/import</code></h3><p class="summary">Fetch / import posts, compute features and train (runs in the background)</p><h4>Parameters</h4><table><thead><tr><th>Name</th><th>In</th><th>Type</th><th>Description</th></tr></thead><tbody><tr><td><code>team_id</code> <span class=req>required</span></td><td>path</td><td>integer</td><td></td></tr></tbody></table><h4>JSON body</h4><table><thead><tr><th>Field</th><th>Type</th><th>Description</th></tr></thead><tbody><tr><td><code>fetch_instagram</code></td><td>boolean</td><td>Download the team page and other pages with Instaloader. Default: <code>true</code>.</td></tr><tr><td><code>max_posts</code></td><td>integer</td><td>Posts to download from the team page. Default: <code>300</code>.</td></tr><tr><td><code>max_posts_other</code></td><td>integer</td><td>Posts to download from each other page. Default: <code>60</code>.</td></tr><tr><td><code>since</code></td><td>string (date) | null</td><td>Only download posts on or after this date (old posts reflect an old style).</td></tr><tr><td><code>folders</code></td><td>array of <a href="#schema-FolderSpec">FolderSpec</a></td><td></td></tr></tbody></table><h4>Example request</h4><pre><code class="sh">curl -X POST $API/teams/1/import -H &quot;Content-Type: application/json&quot; \
+  -d &#x27;{&quot;fetch_instagram&quot;: true, &quot;max_posts&quot;: 200, &quot;max_posts_other&quot;: 30, &quot;since&quot;: &quot;2026-01-01&quot;}&#x27;</code></pre><h4>Responses</h4><p><code>202</code> Successful Response, <code>422</code> Validation Error</p><h4>Example response</h4><pre><code class="json">{
+  &quot;job_id&quot;: 7
+}</code></pre></section><section class="op" id="op-post-teams-team_id-import-upload"><h3><span class="m post">POST</span> <code>/teams/{team_id}/import/upload</code></h3><p class="summary">Upload many images at once: team posts, other-page posts, accepted designs or rejected drafts</p><h4>Parameters</h4><table><thead><tr><th>Name</th><th>In</th><th>Type</th><th>Description</th></tr></thead><tbody><tr><td><code>team_id</code> <span class=req>required</span></td><td>path</td><td>integer</td><td></td></tr></tbody></table><h4>Form fields (multipart/form-data)</h4><table><thead><tr><th>Field</th><th>Type</th><th>Description</th></tr></thead><tbody><tr><td><code>files</code> <span class=req>required</span></td><td>array of file</td><td></td></tr><tr><td><code>label</code></td><td>string</td><td>team | other | accepted | rejected. 'accepted' and 'rejected' are designs the seniors decided on; they train the approval model. Default: <code>&quot;team&quot;</code>.</td></tr><tr><td><code>project</code></td><td>string</td><td>Which brief/project these designs were for, e.g. 'finlit-talk'. Versions of one brief let the model learn which version wins.</td></tr><tr><td><code>train</code></td><td>boolean</td><td> Default: <code>true</code>.</td></tr></tbody></table><h4>Example request</h4><pre><code class="sh">curl -X POST $API/teams/1/import/upload \
+  -F &quot;files=@post1.jpg&quot; -F &quot;files=@post2.jpg&quot; -F &quot;label=team&quot; </code></pre><h4>Responses</h4><p><code>201</code> Successful Response, <code>422</code> Validation Error</p></section><section class="op" id="op-get-jobs-job_id"><h3><span class="m get">GET</span> <code>/jobs/{job_id}</code></h3><p class="summary">Get Job</p><h4>Parameters</h4><table><thead><tr><th>Name</th><th>In</th><th>Type</th><th>Description</th></tr></thead><tbody><tr><td><code>job_id</code> <span class=req>required</span></td><td>path</td><td>integer</td><td></td></tr></tbody></table><h4>Responses</h4><p><code>200</code> Successful Response, <code>422</code> Validation Error</p><h4>Example response</h4><pre><code class="json">{
+  &quot;id&quot;: 7,
+  &quot;team_id&quot;: 1,
+  &quot;kind&quot;: &quot;import&quot;,
+  &quot;status&quot;: &quot;running&quot;,
+  &quot;progress&quot;: 0.42,
+  &quot;message&quot;: &quot;Computed features for 120/280 images&quot;,
+  &quot;created_at&quot;: &quot;2026-11-11T16:57:19&quot;,
+  &quot;finished_at&quot;: null
+}</code></pre></section><section class="op" id="op-get-teams-team_id-jobs"><h3><span class="m get">GET</span> <code>/teams/{team_id}/jobs</code></h3><p class="summary">List Jobs</p><h4>Parameters</h4><table><thead><tr><th>Name</th><th>In</th><th>Type</th><th>Description</th></tr></thead><tbody><tr><td><code>team_id</code> <span class=req>required</span></td><td>path</td><td>integer</td><td></td></tr><tr><td><code>limit</code></td><td>query</td><td>integer</td><td> Default: <code>10</code>.</td></tr></tbody></table><h4>Responses</h4><p><code>200</code> Successful Response, <code>422</code> Validation Error</p></section><section class="op" id="op-get-teams-team_id-posts"><h3><span class="m get">GET</span> <code>/teams/{team_id}/posts</code></h3><p class="summary">List Posts</p><h4>Parameters</h4><table><thead><tr><th>Name</th><th>In</th><th>Type</th><th>Description</th></tr></thead><tbody><tr><td><code>team_id</code> <span class=req>required</span></td><td>path</td><td>integer</td><td></td></tr><tr><td><code>label</code></td><td>query</td><td>string | null</td><td></td></tr><tr><td><code>with_features</code></td><td>query</td><td>boolean</td><td> Default: <code>false</code>.</td></tr><tr><td><code>limit</code></td><td>query</td><td>integer</td><td> Default: <code>60</code>. Max 500.</td></tr><tr><td><code>offset</code></td><td>query</td><td>integer</td><td> Default: <code>0</code>.</td></tr></tbody></table><h4>Responses</h4><p><code>200</code> Successful Response, <code>422</code> Validation Error</p><h4>Example response</h4><pre><code class="json">{
+  &quot;total&quot;: 74,
+  &quot;items&quot;: [
+    {
+      &quot;id&quot;: 74,
+      &quot;team_id&quot;: 1,
+      &quot;label&quot;: &quot;team&quot;,
+      &quot;source_page&quot;: &quot;techkriti.iitk&quot;,
+      &quot;image_url&quot;: &quot;/media/images/team_1/team/techkriti.iitk/DflpJQx…&quot;,
+      &quot;caption&quot;: &quot;Happy National Education Day! 🇮🇳\nToday, we honor…&quot;,
+      &quot;posted_at&quot;: &quot;2026-11-11T04:39:22&quot;,
+      &quot;likes&quot;: 99,
+      &quot;comments&quot;: 18,
+      &quot;features&quot;: {
+        &quot;brightness&quot;: 0.6857157945632935,
+        &quot;saturation&quot;: 0.22080402076244354,
+        &quot;warmth&quot;: 0.6214078068733215,
+        &quot;text_amount&quot;: 0.8418484003553118,
+        &quot;busyness&quot;: 0.5685057003257329,
+        &quot;whitespace&quot;: 0.2916666666666667,
+        &quot;contrast&quot;: 0.7648060001739874,
+        &quot;illustration&quot;: 0.5163147031267467,
+        &quot;palette&quot;: [
+          {
+            &quot;hex&quot;: &quot;#cbc9c8&quot;,
+            &quot;share&quot;: 0.517
+          },
+          {
+            &quot;hex&quot;: &quot;#9b8e88&quot;,
+            &quot;share&quot;: 0.162
+          },
+          {
+            &quot;hex&quot;: &quot;#a51036&quot;,
+            &quot;share&quot;: 0.123
+          },
+          {
+            &quot;hex&quot;: &quot;#3f3432&quot;,
+            &quot;share&quot;: 0.112
+          },
+          {
+            &quot;hex&quot;: &quot;#ca9c49&quot;,
+            &quot;share&quot;: 0.085
+          }
+        ]
+      }
+    },
+    &quot;…&quot;
+  ]
+}</code></pre></section><section class="op" id="op-post-teams-team_id-posts"><h3><span class="m post">POST</span> <code>/teams/{team_id}/posts</code></h3><p class="summary">Add one post or draft by hand (features are computed right away)</p><h4>Parameters</h4><table><thead><tr><th>Name</th><th>In</th><th>Type</th><th>Description</th></tr></thead><tbody><tr><td><code>team_id</code> <span class=req>required</span></td><td>path</td><td>integer</td><td></td></tr></tbody></table><h4>Form fields (multipart/form-data)</h4><table><thead><tr><th>Field</th><th>Type</th><th>Description</th></tr></thead><tbody><tr><td><code>file</code> <span class=req>required</span></td><td>file</td><td></td></tr><tr><td><code>label</code></td><td>string</td><td> Default: <code>&quot;team&quot;</code>.</td></tr><tr><td><code>caption</code></td><td>string</td><td></td></tr><tr><td><code>likes</code></td><td>integer | null</td><td></td></tr><tr><td><code>posted_at</code></td><td>string | null</td><td>YYYY-MM-DD</td></tr></tbody></table><h4>Responses</h4><p><code>201</code> Successful Response, <code>422</code> Validation Error</p></section><section class="op" id="op-get-posts-post_id"><h3><span class="m get">GET</span> <code>/posts/{post_id}</code></h3><p class="summary">Get Post</p><h4>Parameters</h4><table><thead><tr><th>Name</th><th>In</th><th>Type</th><th>Description</th></tr></thead><tbody><tr><td><code>post_id</code> <span class=req>required</span></td><td>path</td><td>integer</td><td></td></tr></tbody></table><h4>Responses</h4><p><code>200</code> Successful Response, <code>422</code> Validation Error</p></section><section class="op" id="op-patch-posts-post_id"><h3><span class="m patch">PATCH</span> <code>/posts/{post_id}</code></h3><p class="summary">Set what the seniors decided about a post, and its project</p><h4>Parameters</h4><table><thead><tr><th>Name</th><th>In</th><th>Type</th><th>Description</th></tr></thead><tbody><tr><td><code>post_id</code> <span class=req>required</span></td><td>path</td><td>integer</td><td></td></tr></tbody></table><h4>JSON body</h4><table><thead><tr><th>Field</th><th>Type</th><th>Description</th></tr></thead><tbody><tr><td><code>decision</code></td><td><code>&quot;accepted&quot;</code> | <code>&quot;rejected&quot;</code> | <code>&quot;&quot;</code> | null</td><td>What the seniors decided about this exact design ('' clears it).</td></tr><tr><td><code>project</code></td><td>string | null</td><td>The brief/project this design was for.</td></tr></tbody></table><h4>Responses</h4><p><code>200</code> Successful Response, <code>422</code> Validation Error</p></section><section class="op" id="op-post-features"><h3><span class="m post">POST</span> <code>/features</code></h3><p class="summary">Utility: CLIP vector + style features of any image</p><h4>Parameters</h4><table><thead><tr><th>Name</th><th>In</th><th>Type</th><th>Description</th></tr></thead><tbody><tr><td><code>include_vector</code></td><td>query</td><td>boolean</td><td> Default: <code>false</code>.</td></tr></tbody></table><h4>Form fields (multipart/form-data)</h4><table><thead><tr><th>Field</th><th>Type</th><th>Description</th></tr></thead><tbody><tr><td><code>file</code> <span class=req>required</span></td><td>file</td><td></td></tr></tbody></table><h4>Example request</h4><pre><code class="sh">curl -X POST &quot;$API/features?include_vector=false&quot; -F &quot;file=@poster.jpg&quot; </code></pre><h4>Responses</h4><p><code>200</code> Successful Response, <code>422</code> Validation Error</p></section><h2 id="tag-teams">Teams</h2><p class="muted">Design teams and their Instagram pages.</p><section class="op" id="op-get-health"><h3><span class="m get">GET</span> <code>/health</code></h3><p class="summary">Health</p><h4>Responses</h4><p><code>200</code> Successful Response</p><h4>Example response</h4><pre><code class="json">{
+  &quot;ok&quot;: true,
+  &quot;fake_clip&quot;: false
+}</code></pre></section><section class="op" id="op-get-teams"><h3><span class="m get">GET</span> <code>/teams</code></h3><p class="summary">List Teams</p><h4>Responses</h4><p><code>200</code> Successful Response</p><h4>Example response</h4><pre><code class="json">[
+  {
+    &quot;id&quot;: 1,
+    &quot;name&quot;: &quot;Techkriti Design&quot;,
+    &quot;instagram_handle&quot;: &quot;techkriti.iitk&quot;,
+    &quot;other_pages&quot;: [
+      &quot;techfest_iitbombay&quot;,
+      &quot;shaastra_iitm&quot;,
+      &quot;ktj.iitkgp&quot;,
+      &quot;pragyan_nitt&quot;,
+      &quot;bitsapogee&quot;,
+      &quot;tryst.iitd&quot;
+    ],
+    &quot;created_at&quot;: &quot;2026-11-11T16:48:02.678010&quot;,
+    &quot;n_posts&quot;: 74,
+    &quot;trained&quot;: true
+  }
+]</code></pre></section><section class="op" id="op-post-teams"><h3><span class="m post">POST</span> <code>/teams</code></h3><p class="summary">Create Team</p><h4>JSON body</h4><table><thead><tr><th>Field</th><th>Type</th><th>Description</th></tr></thead><tbody><tr><td><code>name</code> <span class=req>required</span></td><td>string</td><td> Example: <code>&quot;Techkriti Design&quot;</code>.</td></tr><tr><td><code>instagram_handle</code></td><td>string | null</td><td>The team's own page. Leave empty to import images by hand. Example: <code>&quot;techkriti.iitk&quot;</code>.</td></tr><tr><td><code>other_pages</code></td><td>array of string</td><td>Pages whose posts count as 'not our vibe'. Example: <code>[&quot;antaragni.iitk&quot;, &quot;moodi.iitb&quot;]</code>.</td></tr></tbody></table><h4>Example request</h4><pre><code class="sh">curl -X POST $API/teams -H &quot;Content-Type: application/json&quot; \
+  -d &#x27;{&quot;name&quot;: &quot;Techkriti Design&quot;, &quot;instagram_handle&quot;: &quot;techkriti.iitk&quot;, &quot;other_pages&quot;: []}&#x27;</code></pre><h4>Responses</h4><p><code>201</code> Successful Response, <code>422</code> Validation Error</p></section><section class="op" id="op-get-teams-team_id"><h3><span class="m get">GET</span> <code>/teams/{team_id}</code></h3><p class="summary">Get Team</p><h4>Parameters</h4><table><thead><tr><th>Name</th><th>In</th><th>Type</th><th>Description</th></tr></thead><tbody><tr><td><code>team_id</code> <span class=req>required</span></td><td>path</td><td>integer</td><td></td></tr></tbody></table><h4>Responses</h4><p><code>200</code> Successful Response, <code>422</code> Validation Error</p></section><section class="op" id="op-patch-teams-team_id"><h3><span class="m patch">PATCH</span> <code>/teams/{team_id}</code></h3><p class="summary">Patch Team</p><h4>Parameters</h4><table><thead><tr><th>Name</th><th>In</th><th>Type</th><th>Description</th></tr></thead><tbody><tr><td><code>team_id</code> <span class=req>required</span></td><td>path</td><td>integer</td><td></td></tr></tbody></table><h4>JSON body</h4><table><thead><tr><th>Field</th><th>Type</th><th>Description</th></tr></thead><tbody><tr><td><code>name</code></td><td>string | null</td><td></td></tr><tr><td><code>instagram_handle</code></td><td>string | null</td><td></td></tr><tr><td><code>other_pages</code></td><td>array of string | null</td><td></td></tr></tbody></table><h4>Responses</h4><p><code>200</code> Successful Response, <code>422</code> Validation Error</p></section>
+<h2 id="schemas">Schemas</h2><section class="op" id="schema-Panel"><h3><code>Panel</code></h3><p>The JSON a plugin returns. Every field except title is optional.</p><table><thead><tr><th>Field</th><th>Type</th><th>Description</th></tr></thead><tbody><tr><td><code>title</code> <span class=req>required</span></td><td>string</td><td></td></tr><tr><td><code>summary</code></td><td>string | null</td><td></td></tr><tr><td><code>metrics</code></td><td>array of <a href="#schema-PanelMetric">PanelMetric</a> | null</td><td></td></tr><tr><td><code>items</code></td><td>array of <a href="#schema-PanelItem">PanelItem</a> | null</td><td></td></tr><tr><td><code>chart</code></td><td><a href="#schema-PanelChart">PanelChart</a> | null</td><td></td></tr></tbody></table></section><section class="op" id="schema-PanelMetric"><h3><code>PanelMetric</code></h3><p></p><table><thead><tr><th>Field</th><th>Type</th><th>Description</th></tr></thead><tbody><tr><td><code>label</code> <span class=req>required</span></td><td>string</td><td></td></tr><tr><td><code>value</code> <span class=req>required</span></td><td>number | integer | string</td><td></td></tr><tr><td><code>unit</code></td><td>string | null</td><td></td></tr></tbody></table></section><section class="op" id="schema-PanelItem"><h3><code>PanelItem</code></h3><p></p><table><thead><tr><th>Field</th><th>Type</th><th>Description</th></tr></thead><tbody><tr><td><code>text</code> <span class=req>required</span></td><td>string</td><td></td></tr><tr><td><code>ok</code></td><td>boolean | null</td><td>true = shown with a tick, false = with a cross, null = plain.</td></tr></tbody></table></section><section class="op" id="schema-PanelChart"><h3><code>PanelChart</code></h3><p></p><table><thead><tr><th>Field</th><th>Type</th><th>Description</th></tr></thead><tbody><tr><td><code>type</code></td><td><code>&quot;bar&quot;</code> | <code>&quot;line&quot;</code></td><td> Default: <code>&quot;bar&quot;</code>.</td></tr><tr><td><code>title</code></td><td>string | null</td><td></td></tr><tr><td><code>x_label</code></td><td>string | null</td><td></td></tr><tr><td><code>y_label</code></td><td>string | null</td><td></td></tr><tr><td><code>points</code> <span class=req>required</span></td><td>array of <a href="#schema-PanelPoint">PanelPoint</a></td><td></td></tr></tbody></table></section><section class="op" id="schema-PanelPoint"><h3><code>PanelPoint</code></h3><p></p><table><thead><tr><th>Field</th><th>Type</th><th>Description</th></tr></thead><tbody><tr><td><code>label</code> <span class=req>required</span></td><td>string</td><td></td></tr><tr><td><code>value</code> <span class=req>required</span></td><td>number</td><td></td></tr></tbody></table></section><section class="op" id="schema-PluginIn"><h3><code>PluginIn</code></h3><p></p><table><thead><tr><th>Field</th><th>Type</th><th>Description</th></tr></thead><tbody><tr><td><code>name</code> <span class=req>required</span></td><td>string</td><td> Example: <code>&quot;Contrast checker&quot;</code>.</td></tr><tr><td><code>url</code> <span class=req>required</span></td><td>string</td><td>We POST each event here and expect a Panel back within 5 seconds. Example: <code>&quot;http://localhost:8100/hook&quot;</code>.</td></tr><tr><td><code>slot</code></td><td><code>&quot;result&quot;</code> | <code>&quot;profile&quot;</code></td><td>Where the panel shows. Default: <code>&quot;result&quot;</code>.</td></tr><tr><td><code>description</code></td><td>string</td><td></td></tr><tr><td><code>author_team</code></td><td>string</td><td></td></tr><tr><td><code>team_id</code></td><td>integer | null</td><td>Only for this team; empty = every team.</td></tr></tbody></table></section><section class="op" id="schema-PluginPatch"><h3><code>PluginPatch</code></h3><p></p><table><thead><tr><th>Field</th><th>Type</th><th>Description</th></tr></thead><tbody><tr><td><code>enabled</code></td><td>boolean | null</td><td></td></tr><tr><td><code>url</code></td><td>string | null</td><td></td></tr><tr><td><code>name</code></td><td>string | null</td><td></td></tr></tbody></table></section><section class="op" id="schema-TeamIn"><h3><code>TeamIn</code></h3><p></p><table><thead><tr><th>Field</th><th>Type</th><th>Description</th></tr></thead><tbody><tr><td><code>name</code> <span class=req>required</span></td><td>string</td><td> Example: <code>&quot;Techkriti Design&quot;</code>.</td></tr><tr><td><code>instagram_handle</code></td><td>string | null</td><td>The team's own page. Leave empty to import images by hand. Example: <code>&quot;techkriti.iitk&quot;</code>.</td></tr><tr><td><code>other_pages</code></td><td>array of string</td><td>Pages whose posts count as 'not our vibe'. Example: <code>[&quot;antaragni.iitk&quot;, &quot;moodi.iitb&quot;]</code>.</td></tr></tbody></table></section><section class="op" id="schema-TeamPatch"><h3><code>TeamPatch</code></h3><p></p><table><thead><tr><th>Field</th><th>Type</th><th>Description</th></tr></thead><tbody><tr><td><code>name</code></td><td>string | null</td><td></td></tr><tr><td><code>instagram_handle</code></td><td>string | null</td><td></td></tr><tr><td><code>other_pages</code></td><td>array of string | null</td><td></td></tr></tbody></table></section><section class="op" id="schema-ImportIn"><h3><code>ImportIn</code></h3><p></p><table><thead><tr><th>Field</th><th>Type</th><th>Description</th></tr></thead><tbody><tr><td><code>fetch_instagram</code></td><td>boolean</td><td>Download the team page and other pages with Instaloader. Default: <code>true</code>.</td></tr><tr><td><code>max_posts</code></td><td>integer</td><td>Posts to download from the team page. Default: <code>300</code>.</td></tr><tr><td><code>max_posts_other</code></td><td>integer</td><td>Posts to download from each other page. Default: <code>60</code>.</td></tr><tr><td><code>since</code></td><td>string (date) | null</td><td>Only download posts on or after this date (old posts reflect an old style).</td></tr><tr><td><code>folders</code></td><td>array of <a href="#schema-FolderSpec">FolderSpec</a></td><td></td></tr></tbody></table></section><section class="op" id="schema-FolderSpec"><h3><code>FolderSpec</code></h3><p></p><table><thead><tr><th>Field</th><th>Type</th><th>Description</th></tr></thead><tbody><tr><td><code>path</code> <span class=req>required</span></td><td>string</td><td>Folder on the server machine with images (and optional meta.csv).</td></tr><tr><td><code>label</code></td><td><code>&quot;team&quot;</code> | <code>&quot;other&quot;</code> | <code>&quot;rejected&quot;</code></td><td> Default: <code>&quot;team&quot;</code>.</td></tr><tr><td><code>source_page</code></td><td>string</td><td></td></tr></tbody></table></section>
+<p class="muted" style="margin-top:40px">Generated from the API's OpenAPI spec by <code>scripts/build_api_docs.py</code>.</p>
+</main></div></body></html>
