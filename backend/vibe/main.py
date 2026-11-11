@@ -9,6 +9,7 @@ import threading
 import uuid
 from contextlib import asynccontextmanager
 from datetime import datetime, timedelta
+from pathlib import Path
 
 from fastapi import Body, FastAPI, File, Form, HTTPException, Query, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
@@ -19,7 +20,7 @@ from sqlalchemy import func, select
 
 from . import config, features, importers, model, pipeline, plugins
 from .db import Check, Job, ModelVersion, Outcome, Plugin, Post, SessionLocal, Team, init_db
-from .schemas import ImportIn, OutcomeIn, Panel, PluginIn, PluginPatch, TeamIn, TeamPatch
+from .schemas import ImportIn, OutcomeIn, Panel, PluginIn, PluginPatch, PostPatch, TeamIn, TeamPatch
 
 MAX_UPLOAD_MB = 15
 _scheduler = None
@@ -158,17 +159,22 @@ def start_import(team_id: int, body: ImportIn = Body(default_factory=ImportIn)):
 
 
 @app.post("/teams/{team_id}/import/upload", tags=["data"], status_code=201,
-          summary="Upload many images at once as team posts, other-page posts or rejected drafts")
+          summary="Upload many images at once: team posts, other-page posts, accepted designs or rejected drafts")
 async def upload_many(team_id: int, files: list[UploadFile] = File(...),
-                      label: str = Form("team"), train: bool = Form(True)):
-    if label not in ("team", "other", "rejected"):
-        raise HTTPException(400, "label must be team, other or rejected")
+                      label: str = Form("team", description="team | other | accepted | rejected. "
+                                        "'accepted' and 'rejected' are designs the seniors decided on; they train the approval model."),
+                      project: str = Form("", description="Which brief/project these designs were for, e.g. 'finlit-talk'. "
+                                          "Versions of one brief let the model learn which version wins."),
+                      train: bool = Form(True)):
+    if label not in ("team", "other", "rejected", "accepted"):
+        raise HTTPException(400, "label must be team, other, accepted or rejected")
     with SessionLocal() as s:
         _team(s, team_id)
     n = 0
     for f in files:
         data, _ = await _read_image(f)
-        importers.add_upload(team_id, data, f.filename or "upload.png", label)
+        importers.add_upload(team_id, data, f.filename or "upload.png", "team" if label == "accepted" else label,
+                             decision="accepted" if label == "accepted" else None, project=project.strip() or None)
         n += 1
     job = None
     if train:
@@ -214,6 +220,18 @@ def get_post(post_id: int):
         if p is None:
             raise HTTPException(404, "Post not found")
         return p.to_dict(with_features=True)
+
+
+@app.patch("/posts/{post_id}", tags=["data"], summary="Set what the seniors decided about a post, and its project")
+def patch_post(post_id: int, body: PostPatch):
+    with SessionLocal() as s:
+        p = s.get(Post, post_id)
+        if p is None:
+            raise HTTPException(404, "Post not found")
+        for k, v in body.model_dump(exclude_unset=True).items():
+            setattr(p, k, v or None)
+        s.commit()
+    return get_post(post_id)
 
 
 @app.post("/teams/{team_id}/posts", tags=["data"], status_code=201,
@@ -284,12 +302,32 @@ def get_style_profile(team_id: int, request: Request, include_plugins: bool = Tr
 
 # ------------------------------------------------------------------------ checks
 @app.post("/teams/{team_id}/checks", tags=["checks"], status_code=201,
-          summary="Score a plan: 1-5 inspiration images and/or a description")
+          summary="Score a plan (1-5 inspiration images and/or a description) or a finished design (kind=final, 1 image)")
 async def create_check(team_id: int, request: Request,
-                       images: list[UploadFile] = File(default=[]),
-                       description: str = Form(""), user: str = Form("")):
+                       images: list[UploadFile] = File(
+                           default=[], description="1-5 inspiration images (JPG, PNG or WebP, up to 15 MB each). "
+                                                   "Repeat the field once per image."),
+                       description: str = Form("", description="What you plan to make: colours, layout, fonts, "
+                                                               "photo or illustration. Send images, a description, or both."),
+                       user: str = Form("", description="Who is checking (optional, shown in History)."),
+                       kind: str = Form("plan", description="plan = inspiration before designing; "
+                                        "final = your finished design (exactly 1 image): adds finish checks "
+                                        "(legibility, text size, edges, resolution) and the learned approval model."),
+                       plan_check_id: int | None = Form(None, description="For kind=final: the plan check this design came from, "
+                                                        "to compare the final with its plan."),
+                       project: str = Form("", description="Which brief/project this is for (optional). "
+                                           "Lets decisions on versions of one brief train the approval model.")):
     with SessionLocal() as s:
         team = _team(s, team_id).to_dict()
+        plan = s.get(Check, plan_check_id) if plan_check_id else None
+        if plan_check_id and (plan is None or plan.team_id != team_id):
+            raise HTTPException(404, "Plan check not found for this team")
+        plan_paths = json.loads(plan.inspo_json) if plan else []
+        plan_dict = plan.to_dict() if plan else None
+        if plan is not None and not project:
+            project = plan.project or ""
+    if kind not in ("plan", "final"):
+        raise HTTPException(400, "kind must be plan or final")
     images = [f for f in images if f.filename]
     if len(images) > 5:
         raise HTTPException(400, "Send at most 5 inspiration images")
@@ -303,7 +341,8 @@ async def create_check(team_id: int, request: Request,
         pil.append(img)
         paths.append(dest.relative_to(config.DATA_DIR).as_posix())
     try:
-        result = model.score(team_id, pil, description)
+        plan_imgs = [features.load_image(config.DATA_DIR / p) for p in plan_paths] if kind == "final" else None
+        result = model.score(team_id, pil, description, kind=kind, plan_images=plan_imgs, plan_result=plan_dict)
     except model.NotTrained as e:
         raise HTTPException(409, str(e))
     except ValueError as e:
@@ -311,15 +350,16 @@ async def create_check(team_id: int, request: Request,
     with SessionLocal() as s:
         c = Check(team_id=team_id, user=user, description=description, inspo_json=json.dumps(paths),
                   score=result["score"], verdict=result["verdict"], result_json=json.dumps(result),
-                  model_version=result["model_version"])
+                  model_version=result["model_version"], kind=kind,
+                  parent_id=plan_check_id if kind == "final" else None, project=project.strip() or None)
         s.add(c)
         s.commit()
         check = c.to_dict()
     base = _base_url(request)
     check["plugins"] = plugins.run_plugins(team_id, "result", {
         "event": "check.completed", "api_base": base, "team": team,
-        "check": {**{k: check[k] for k in ("id", "score", "verdict", "verdict_level", "reasons", "plan_style",
-                                           "plan_palette", "description", "nearest", "engagement")},
+        "check": {**{k: check.get(k) for k in ("id", "kind", "score", "verdict", "verdict_level", "reasons", "plan_style",
+                                               "plan_palette", "description", "nearest", "engagement", "finish")},
                   "inspo_urls": [base + u for u in check["inspo_urls"]]},
     })
     with SessionLocal() as s:  # keep plugin panels with the check so History shows them too
@@ -345,7 +385,10 @@ def get_check(check_id: int):
         c = s.get(Check, check_id)
         if c is None:
             raise HTTPException(404, "Check not found")
-        return c.to_dict()
+        out = c.to_dict()
+        out["finals"] = [{"id": f.id, "score": f.score, "verdict": f.verdict}
+                         for f in s.scalars(select(Check).where(Check.parent_id == check_id).order_by(Check.id))]
+        return out
 
 
 @app.post("/checks/{check_id}/outcome", tags=["checks"],
@@ -356,13 +399,21 @@ async def set_outcome(check_id: int, result: str = Form(...), final_image: Uploa
         c = s.get(Check, check_id)
         if c is None:
             raise HTTPException(404, "Check not found")
-        team_id = c.team_id
-    final_path = None
+        team_id, kind, project = c.team_id, c.kind or "plan", c.project
+        own = json.loads(c.inspo_json)
+    data = name = None
     if final_image is not None and final_image.filename:
         data, _ = await _read_image(final_image)
-        p = importers.add_upload(team_id, data, final_image.filename,
-                                 "rejected" if result == "rejected" else "team",
-                                 caption=f"final design of check {check_id}")
+        name = final_image.filename
+    elif kind == "final" and own:   # a final check's own image IS the design that was decided on
+        data, name = (config.DATA_DIR / own[0]).read_bytes(), Path(own[0]).name
+    final_path = None
+    if data is not None:
+        decided = result in ("approved", "posted")
+        p = importers.add_upload(team_id, data, name, "team" if decided else "rejected",
+                                 caption=f"final design of check {check_id}",
+                                 decision="accepted" if decided else "rejected",
+                                 project=project or f"check-{check_id}")
         final_path = p.image_path
         pipeline.compute_missing_features(team_id)
     with SessionLocal() as s:

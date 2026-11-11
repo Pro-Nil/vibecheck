@@ -96,6 +96,9 @@ select.inline { width: auto; }
 .reasons li:last-child { border-bottom: none; }
 .mark { flex: none; width: 24px; height: 24px; border-radius: 50%; display: grid; place-items: center; font-weight: 800; font-size: .85rem; color: #fff; }
 .mark.ok { background: var(--good); } .mark.bad { background: var(--bad); }
+.mark.warn { background: var(--warn); }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .mark { color: #111; } }
+:root[data-theme="dark"] .mark { color: #111; }
 .swatches { display: flex; border-radius: 8px; overflow: hidden; border: 1px solid var(--border); height: 44px; }
 .swatches div { min-width: 6px; }
 .swatch-labels { display: flex; gap: 8px; flex-wrap: wrap; font-size: .8rem; color: var(--text-2); margin-top: 4px; font-family: ui-monospace, monospace; }

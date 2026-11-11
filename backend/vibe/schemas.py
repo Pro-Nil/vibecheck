@@ -87,3 +87,9 @@ class Panel(BaseModel):
     metrics: list[PanelMetric] | None = None
     items: list[PanelItem] | None = None
     chart: PanelChart | None = None
+
+
+class PostPatch(BaseModel):
+    decision: Literal["accepted", "rejected", ""] | None = Field(
+        None, description="What the seniors decided about this exact design ('' clears it).")
+    project: str | None = Field(None, max_length=120, description="The brief/project this design was for.")

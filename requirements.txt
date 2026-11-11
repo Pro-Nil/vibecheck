@@ -9,6 +9,7 @@ python-multipart
 sqlalchemy
 scikit-learn
 opencv-python-headless
+easyocr
 pillow
 numpy
 umap-learn

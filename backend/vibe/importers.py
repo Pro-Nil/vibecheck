@@ -122,7 +122,11 @@ def import_folder(team_id: int, folder: str | Path, label: str, source_page: str
 
 
 def add_upload(team_id: int, data: bytes, filename: str, label: str, caption: str = "",
-               likes: int | None = None, posted_at: datetime | None = None) -> Post:
+               likes: int | None = None, posted_at: datetime | None = None,
+               decision: str | None = None, project: str | None = None) -> Post:
+    """Store an uploaded image as a post. A rejected draft always carries decision "rejected"."""
+    if label == "rejected":
+        decision = "rejected"
     import hashlib
     digest = hashlib.sha1(data).hexdigest()[:16]
     ext = Path(filename).suffix.lower() if Path(filename).suffix.lower() in IMAGE_EXTS else ".png"
@@ -134,10 +138,15 @@ def add_upload(team_id: int, data: bytes, filename: str, label: str, caption: st
         existing = s.scalar(select(Post).where(Post.team_id == team_id, Post.source_page == "uploads",
                                                Post.external_id == digest))
         if existing:
+            if decision or project:
+                existing.label = label
+                existing.decision = decision or existing.decision
+                existing.project = project or existing.project
+                s.commit()
             return existing
         p = Post(team_id=team_id, label=label, source_page="uploads", external_id=digest,
                  image_path=dest.relative_to(config.DATA_DIR).as_posix(), caption=caption,
-                 likes=likes, posted_at=posted_at)
+                 likes=likes, posted_at=posted_at, decision=decision, project=project or None)
         s.add(p)
         s.commit()
         s.refresh(p)

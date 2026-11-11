@@ -77,6 +77,7 @@ export default function SetupPage({ team, teamId, setTeamId, reloadTeams, firstR
   const [maxOther, setMaxOther] = useState(60)
   const [since, setSince] = useState(`${new Date().getFullYear()}-01-01`)
   const [label, setLabel] = useState('team')
+  const [project, setProject] = useState('')
   const [files, setFiles] = useState([])
   const [msg, setMsg] = useState('')
   const [err, setErr] = useState('')
@@ -102,7 +103,7 @@ export default function SetupPage({ team, teamId, setTeamId, reloadTeams, firstR
   })
   const upload = () => act(async () => {
     if (!files.length) throw new Error('Choose some images first.')
-    const r = await api.uploadMany(teamId, files, label)
+    const r = await api.uploadMany(teamId, files, label, project)
     setMsg(`Uploaded ${r.added} images as "${label}". Features and retraining are running.`)
     setFiles([])
     setBump(b => b + 1)
@@ -156,9 +157,17 @@ export default function SetupPage({ team, teamId, setTeamId, reloadTeams, firstR
             <select id="lab" value={label} onChange={e => setLabel(e.target.value)}>
               <option value="team">Our team's posts (approved)</option>
               <option value="other">Other pages' posts (not our vibe)</option>
+              <option value="accepted">Designs the seniors accepted</option>
               <option value="rejected">Rejected drafts</option>
             </select>
           </div>
+          {(label === 'accepted' || label === 'rejected') && (
+            <div className="field">
+              <label htmlFor="proj">Project <span className="hint">(the brief they were for, e.g. finlit-talk)</span></label>
+              <input id="proj" value={project} onChange={e => setProject(e.target.value)} placeholder="finlit-talk" />
+              <span className="hint">Accepted and rejected versions of the same brief teach the approval model which version wins.</span>
+            </div>
+          )}
           <div className="field">
             <label htmlFor="files">Images</label>
             <input id="files" type="file" accept="image/*" multiple onChange={e => setFiles([...e.target.files])} />

@@ -9,6 +9,7 @@ import PluginsPage from './pages/Plugins.jsx'
 
 const NAV = [
   ['check', 'Check my idea'],
+  ['final', 'Check my design'],
   ['history', 'History'],
   ['profile', 'Team style'],
   ['setup', 'Team setup'],
@@ -60,7 +61,7 @@ export default function App() {
   else if (page === 'history') body = <HistoryPage {...props} />
   else if (page === 'profile') body = <ProfilePage {...props} />
   else if (page === 'plugins') body = <PluginsPage {...props} />
-  else body = <CheckPage {...props} />
+  else body = <CheckPage {...props} mode={page === 'final' ? 'final' : 'plan'} planId={page === 'final' && arg ? Number(arg) : null} />
 
   return (
     <>

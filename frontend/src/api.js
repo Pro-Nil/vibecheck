@@ -23,10 +23,11 @@ export const api = {
   createTeam: body => req('POST', '/teams', body),
   patchTeam: (id, body) => req('PATCH', `/teams/${id}`, body),
   startImport: (id, body) => req('POST', `/teams/${id}/import`, body),
-  uploadMany: (id, files, label) => {
+  uploadMany: (id, files, label, project = '') => {
     const f = new FormData()
     files.forEach(x => f.append('files', x))
     f.append('label', label)
+    f.append('project', project)
     f.append('train', 'true')
     return req('POST', `/teams/${id}/import/upload`, f, true)
   },
@@ -37,11 +38,14 @@ export const api = {
   profile: id => req('GET', `/teams/${id}/style-profile`),
   posts: (id, label, limit = 24) => req('GET', `/teams/${id}/posts?label=${label}&limit=${limit}`),
   post: id => req('GET', `/posts/${id}`),
-  check: (id, files, description, user) => {
+  check: (id, files, description, user, { kind = 'plan', planCheckId = null, project = '' } = {}) => {
     const f = new FormData()
     files.forEach(x => f.append('images', x))
     f.append('description', description)
     f.append('user', user || '')
+    f.append('kind', kind)
+    f.append('project', project || '')
+    if (planCheckId) f.append('plan_check_id', String(planCheckId))
     return req('POST', `/teams/${id}/checks`, f, true)
   },
   getCheck: id => req('GET', `/checks/${id}`),
