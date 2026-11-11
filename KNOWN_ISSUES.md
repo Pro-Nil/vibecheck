@@ -70,11 +70,27 @@ The test split is also tiny (≈14 team posts), so any single number has a wide 
 The line comes from Youden's J on team posts vs near-misses, then is clipped to 30–85. It currently sits at the
 85 cap. It says nothing about what the seniors actually approve.
 
-### F7. Bug: the description has no effect when there are no other pages
+### F7. ~~Bug: the description has no effect when there are no other pages~~ (fixed)
 
-`model.score()` compares the description with team posts vs other pages' posts. With no other pages it falls back
-to `s_other = s_team - 0.01`, so the text score is always `sigmoid(0.6) ≈ 0.65`, whatever the designer writes.
-The scale factor `60` in `sigmoid((s_team - s_other) * 60)` is also hand-picked, not fitted.
+**Was:** with no other pages the text score fell back to a constant `sigmoid(0.6) ≈ 0.65`, whatever the designer
+wrote, and the `×60` scale was hand-picked.
+
+**Now:** the description is ranked against 40 typical poster descriptions (`REFERENCE_DESCRIPTIONS` in `model.py`):
+the text score is the share of them it beats at matching the team's posts (minus other pages' posts, when there
+are any). No hand-tuned scale, and it works with or without other pages. Covered by
+`test_description_matters_without_other_pages`. On the real team model:
+
+| Description | Text score |
+|---|---|
+| off-white paper, bold navy fest-name header, dancer photo inside large type | 0.95 |
+| dark navy, bold white title, speaker cut-out, sponsor logos | 0.58 |
+| neon cyberpunk city | 0.30 |
+| meme with Impact font | 0.28 |
+| pastel watercolour flowers | 0.10 |
+| cute cartoon animals | 0.03 |
+
+**Still open:** CLIP reads text inside images, so naming the fest in the description probably inflates the score.
+The 40 reference descriptions were written by hand; a better reference set would come from real briefs.
 
 ### F8. Two "style features" are guesses
 
@@ -144,7 +160,8 @@ published after training.
 6. With enough labelled drafts: a pairwise/ranking model ("which of these two would the seniors pick?") or a
    linear probe on CLIP features, calibrated with Platt scaling so 0.8 really means ~80 %.
 7. Set the approval line from real accepted vs rejected outcomes, not from near-misses.
-8. Fix F7: score text against team posts vs near-misses/rejects when there are no other pages; fit the scale.
+8. Text score (F7, fixed): strip the fest's own name from descriptions before scoring, and replace the hand-written
+   reference descriptions with real briefs from past projects.
 9. Replace zero-shot `text_amount` with OCR (EasyOCR's detector, already a dependency) and validate every style
    feature on 20 hand-labelled posters.
 10. Similarity: compare against one representative per series (cluster first), or drop it once a real classifier exists.

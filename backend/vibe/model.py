@@ -93,10 +93,6 @@ def _ecdf(sorted_ref: np.ndarray, x) -> np.ndarray:
     return np.searchsorted(sorted_ref, x, side="right") / len(sorted_ref)
 
 
-def _sigmoid(z):
-    return 1.0 / (1.0 + np.exp(-z))
-
-
 def _parent_of(ext_id: str) -> int | None:
     # near-miss rows are named aug<k>_<parent post id>
     try:
@@ -135,6 +131,47 @@ class _Scorer:
     def combine(prob, sim_pct, weights=(0.5, 0.5)):
         wc, ws = weights
         return 100.0 * (wc * prob + ws * sim_pct)
+
+
+# Typical poster styles. A description is judged by how much better it matches the team's posts than
+# these do, so the text score is a percentile (0..1) with no hand-tuned scale, and it works even
+# when no other pages were imported.
+REFERENCE_DESCRIPTIONS = [
+    "minimal black and white typographic poster", "colourful cartoon illustration poster",
+    "corporate blue gradient flyer with stock photo", "vintage newspaper style poster",
+    "neon cyberpunk poster with glowing text", "pastel watercolour illustration",
+    "photo collage with many small pictures", "bold red and yellow sale banner",
+    "dark poster with a portrait photo of a speaker", "hand drawn doodle poster",
+    "retro 80s synthwave poster", "flat geometric shapes in bright colours",
+    "elegant gold and black luxury invitation", "grunge textured poster with distressed type",
+    "clean white tech product advertisement", "festival poster with dancers and lights",
+    "sports event poster with an action photo", "infographic with charts and icons",
+    "Instagram quote card with large text", "3D rendered abstract shapes poster",
+    "nature photo with a thin serif title", "comic book style poster with speech bubbles",
+    "pixel art game poster", "Bauhaus style poster with circles and lines",
+    "handwritten chalkboard style poster", "glassmorphism user interface style graphic",
+    "black poster with a bright green code font", "pink and purple gradient music event poster",
+    "traditional Indian festival poster with rangoli", "workshop announcement with a laptop photo",
+    "space themed poster with planets and stars", "robot illustration for a technology event",
+    "simple countdown poster with one big number", "meme style image with impact font",
+    "blueprint style technical drawing poster", "collage of team member photos",
+    "brutalist poster with huge black type", "soft beige aesthetic poster with serif font",
+    "sponsor announcement with company logos", "hackathon poster with circuit patterns",
+]
+
+
+def _text_margin(text_vecs: np.ndarray, team_vecs: np.ndarray, other_vecs: np.ndarray) -> np.ndarray:
+    """How much closer a description is to the team's posts than to other pages' posts
+    (or just its closeness to the team's posts when there are no other pages)."""
+    s_team = _topk_sim(text_vecs, team_vecs)
+    if len(other_vecs):
+        return s_team - _topk_sim(text_vecs, other_vecs)
+    return s_team
+
+
+def _text_reference(art: dict) -> np.ndarray:
+    vecs = features.embed_texts(REFERENCE_DESCRIPTIONS)
+    return np.sort(_text_margin(vecs, art["scorer"].team_vecs, art["other_vecs"]))
 
 
 def _weights(auc_classifier: float, auc_similarity: float) -> tuple[float, float]:
@@ -338,6 +375,7 @@ def train(team_id: int) -> dict:
         "coord_labels": {int(i): str(l) for i, l in zip(d["id"], lab)},
         "date_range": [min(team_dates).isoformat(), max(team_dates).isoformat()] if team_dates else None,
     }
+    artifact["text_ref"] = _text_reference(artifact)
     with SessionLocal() as s:
         version = (s.scalar(select(ModelVersion.id).order_by(ModelVersion.id.desc())) or 0) + 1
         path = config.MODELS_DIR / f"team_{team_id}_v{version}.joblib"
@@ -420,9 +458,10 @@ def score(team_id: int, images: list[Image.Image], description: str = "") -> dic
     text_vec = None
     if description.strip():
         text_vec = features.embed_texts([description.strip()])[0]
-        s_team = float(_topk_sim(text_vec[None], sc.team_vecs)[0])
-        s_other = float(_topk_sim(text_vec[None], art["other_vecs"])[0]) if len(art["other_vecs"]) else s_team - 0.01
-        text_score = float(_sigmoid((s_team - s_other) * 60.0))
+        if art.get("text_ref") is None:  # models trained before this existed
+            art["text_ref"] = _text_reference(art)
+        margin = _text_margin(text_vec[None], sc.team_vecs, art["other_vecs"])
+        text_score = float(_ecdf(art["text_ref"], margin)[0])
         out["components"].update({"text": round(text_score, 3)})
 
     if img_score is not None and text_score is not None:
@@ -465,8 +504,9 @@ def score(team_id: int, images: list[Image.Image], description: str = "") -> dic
     if text_score is not None:
         ok = text_score >= 0.5
         reasons.append({"ok": ok, "feature": "description", "label": "Your description", "deviation": round(0.5 - text_score, 2),
-                        "text": ("Your description matches this team's posts better than other pages' posts."
-                                 if ok else "Your description sounds more like other pages' posts than this team's.")})
+                        "text": (f"Your description fits this team's posts better than {_pct(text_score)}% of typical poster descriptions."
+                                 if ok else f"Your description fits this team's posts worse than most typical poster descriptions "
+                                            f"(better than only {_pct(text_score)}%).")})
     reasons.sort(key=lambda r: (r["ok"], -abs(r.get("deviation", 0))))
     out["reasons"] = reasons
     out["plan_style"] = {k: round(float(plan_style[i]), 3) for i, k in enumerate(STYLE_KEYS)} if plan_style is not None else None

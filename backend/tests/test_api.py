@@ -162,3 +162,20 @@ def test_openapi_has_panel_schema(client):
     assert spec["openapi"].startswith("3.")
     assert "Panel" in spec["components"]["schemas"]
     assert "/teams/{team_id}/checks" in spec["paths"]
+
+
+def test_description_matters_without_other_pages(client, dataset):
+    """Regression: with no other pages the text score used to be a constant (~0.65)."""
+    t = client.post("/teams", json={"name": "Team only"}).json()
+    r = client.post(f"/teams/{t['id']}/import", json={"fetch_instagram": False, "folders": [
+        {"path": str(dataset["team"]), "label": "team", "source_page": "ourpage"}]})
+    assert wait(client, r.json()["job_id"])["status"] == "done"
+    scores = set()
+    for d in ["warm orange minimal poster", "neon cyberpunk city at night", "pastel watercolour flowers",
+              "black and white newspaper", "robot cartoon with speech bubbles"]:
+        res = client.post(f"/teams/{t['id']}/checks", data={"description": d})
+        assert res.status_code == 201
+        text = res.json()["components"]["text"]
+        assert 0.0 <= text <= 1.0
+        scores.add(text)
+    assert len(scores) >= 3  # different descriptions give different text scores
