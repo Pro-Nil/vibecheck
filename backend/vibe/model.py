@@ -58,6 +58,8 @@ from .features import STYLE_KEYS, STYLE_LABELS, STYLE_WORDS
 
 TOP_K = 10                # nearest team posts for "looks like" (8-10 tested equal; 5 was worse)
 LOOK_WEIGHT = 2.0         # look : colour on the z scale (1.5-3 tested equal)
+STYLE_WEIGHT = 1.0        # v6 style match (vs same-topic posts) : colour
+PIXEL_STYLE = [0, 1, 2, 4, 5, 6]   # brightness, saturation, warmth, busyness, whitespace, contrast in STYLE_KEYS
 TOPIC_K = 8               # same-topic team posts for "colour match"
 TWIN_SIM = 0.90           # above this CLIP similarity two posts count as the same series
 MIN_OTHER = 20            # other-page posts needed before the classifier is used
@@ -72,7 +74,11 @@ MIN_DECIDED = 8           # accepted AND rejected designs needed before the appr
 MIN_PROJECTS = 3          # ...from at least this many different projects (briefs)
 MIN_APPROVAL_AUC = 0.60   # leave-one-project-out AUC it must reach to be used
 MAX_APPROVAL_WEIGHT = 0.6
-ARTIFACT_VERSION = 5          # v5: CLIP sees the whole poster (padded), vectors re-embedded
+# Switch-on rule, from scripts/simulate_seniors.py: with 5-12 projects the leave-one-project-out AUC swings
+# +/-0.10-0.15, so a fixed 0.60 bar lets a lucky model in. It must also be better than guessing at the low end
+# of a bootstrap 90 % interval, and not worse than the plain on-brand score on the same designs.
+APPROVAL_CI_LOW = 0.5
+ARTIFACT_VERSION = 6          # v6: + style match vs same-topic posts (v5: CLIP sees the whole poster)
 _cache: dict[int, tuple[int, dict]] = {}
 _cache_lock = threading.Lock()
 
@@ -167,18 +173,34 @@ def _parent_of(ext_id: str) -> int | None:
 
 # ---------------------------------------------------------------------- on-brand
 class _OnBrand:
-    """One-class 'on-brand' scorer built only from the team's own posts."""
+    """One-class 'on-brand' scorer built only from the team's own posts.
 
-    def __init__(self, team_clip: np.ndarray, team_hist: np.ndarray):
+    Three signals, each a smoothed percentile among the team's own posts (leave-one-out), combined on the
+    z scale: overall look (CLIP), colour match and style match, both against the same-topic posts.
+    Style = the six measured pixel features (brightness, saturation, warmth, busyness, empty space,
+    contrast), standardised by the team's spread. Added in v6 because a synthetic-mistake benchmark
+    showed look + colour barely noticed clutter, texture, washed-out or low-contrast versions of a post.
+    """
+
+    def __init__(self, team_clip: np.ndarray, team_hist: np.ndarray, team_style: np.ndarray | None = None):
         self.vecs, self.hist = team_clip, team_hist
-        raw = [self._raw(team_clip[i], team_hist[i], exclude=i) for i in range(len(team_clip))]
+        self.style = None
+        if team_style is not None and len(team_style):
+            px = np.asarray(team_style, np.float32)[:, PIXEL_STYLE]
+            self.st_mu, self.st_sd = px.mean(0), px.std(0) + 1e-3
+            self.style = (px - self.st_mu) / self.st_sd
+        raw = [self._raw(team_clip[i], team_hist[i], None if self.style is None else team_style[i], exclude=i)
+               for i in range(len(team_clip))]
         self.ref_look = np.sort([r[0] for r in raw])
         self.ref_colour = np.sort([r[1] for r in raw])
         self.h_look, self.h_colour = _bandwidth(self.ref_look), _bandwidth(self.ref_colour)
-        self.ref_combined = np.sort([self._z(*self._pcts(a, b)) for a, b in raw])
+        if self.style is not None:
+            self.ref_style = np.sort([r[2] for r in raw])
+            self.h_style = _bandwidth(self.ref_style)
+        self.ref_combined = np.sort([self._z(*self._pcts(*r)) for r in raw])
         self.h_combined = _bandwidth(self.ref_combined)
 
-    def _raw(self, v: np.ndarray, h: np.ndarray, exclude: int | None = None) -> tuple[float, float]:
+    def _raw(self, v, h, st=None, exclude: int | None = None) -> tuple:
         sims = self.vecs @ v
         ok = sims < TWIN_SIM                       # drop near-twins (and the post itself)
         if exclude is not None:
@@ -191,20 +213,31 @@ class _OnBrand:
         look = float(np.sort(sims[cand])[-TOP_K:].mean())
         topic = cand[np.argsort(-sims[cand])[:TOPIC_K]]
         colour = -float(_chi2(h, self.hist[topic]).mean())   # higher = closer
-        return look, colour
+        if self.style is None or st is None:
+            return look, colour, None
+        z = (np.asarray(st, np.float32)[PIXEL_STYLE] - self.st_mu) / self.st_sd
+        style = -float(np.linalg.norm(self.style[topic] - z, axis=1).mean())
+        return look, colour, style
 
-    def _pcts(self, look: float, colour: float) -> tuple[float, float]:
-        return (float(_smooth_ecdf(self.ref_look, look, self.h_look)[0]),
-                float(_smooth_ecdf(self.ref_colour, colour, self.h_colour)[0]))
+    def _pcts(self, look, colour, style=None) -> tuple:
+        lp = float(_smooth_ecdf(self.ref_look, look, self.h_look)[0])
+        cp = float(_smooth_ecdf(self.ref_colour, colour, self.h_colour)[0])
+        sp = None if style is None or self.style is None else float(_smooth_ecdf(self.ref_style, style, self.h_style)[0])
+        return lp, cp, sp
 
     @staticmethod
-    def _z(lp: float, cp: float) -> float:
-        return (LOOK_WEIGHT * _probit(lp) + _probit(cp)) / (LOOK_WEIGHT + 1)
+    def _z(lp: float, cp: float, sp: float | None = None) -> float:
+        if sp is None:
+            return (LOOK_WEIGHT * _probit(lp) + _probit(cp)) / (LOOK_WEIGHT + 1)
+        return (LOOK_WEIGHT * _probit(lp) + _probit(cp) + STYLE_WEIGHT * _probit(sp)) / (LOOK_WEIGHT + 1 + STYLE_WEIGHT)
 
-    def parts(self, v: np.ndarray, h: np.ndarray, exclude: int | None = None) -> dict:
-        lp, cp = self._pcts(*self._raw(v, h, exclude))
-        return {"looks_like": lp, "colour_match": cp,
-                "on_brand": float(_smooth_ecdf(self.ref_combined, self._z(lp, cp), self.h_combined)[0])}
+    def parts(self, v, h, st=None, exclude: int | None = None) -> dict:
+        lp, cp, sp = self._pcts(*self._raw(v, h, st, exclude))
+        out = {"looks_like": lp, "colour_match": cp,
+               "on_brand": float(_smooth_ecdf(self.ref_combined, self._z(lp, cp, sp), self.h_combined)[0])}
+        if sp is not None:
+            out["style_match"] = sp
+        return out
 
 
 def _new_post_scores(d: dict, is_team: np.ndarray) -> tuple[np.ndarray, str]:
@@ -217,8 +250,8 @@ def _new_post_scores(d: dict, is_team: np.ndarray) -> tuple[np.ndarray, str]:
         ref, test = team[months < m], team[months == m]
         if len(ref) < 10:
             continue
-        ob = _OnBrand(d["clip"][ref], d["hist"][ref])
-        out += [ob.parts(d["clip"][i], d["hist"][i])["on_brand"] for i in test]
+        ob = _OnBrand(d["clip"][ref], d["hist"][ref], d["style"][ref])
+        out += [ob.parts(d["clip"][i], d["hist"][i], d["style"][i])["on_brand"] for i in test]
     if len(out) >= MIN_CALIBRATION:
         return np.array(out), "time-forward"
     # series held out: connected groups of posts more than TWIN_SIM similar
@@ -232,8 +265,8 @@ def _new_post_scores(d: dict, is_team: np.ndarray) -> tuple[np.ndarray, str]:
         ref = team[group != g]
         if len(ref) < 10:
             continue
-        ob = _OnBrand(d["clip"][ref], d["hist"][ref])
-        out += [ob.parts(d["clip"][i], d["hist"][i])["on_brand"] for i in team[group == g]]
+        ob = _OnBrand(d["clip"][ref], d["hist"][ref], d["style"][ref])
+        out += [ob.parts(d["clip"][i], d["hist"][i], d["style"][i])["on_brand"] for i in team[group == g]]
     return np.array(out), "series held out"
 
 
@@ -457,7 +490,7 @@ def _approval(d: dict, ob: "_OnBrand", team_rows: np.ndarray, ranges: dict, typo
         return None, status
     X, ob_score = [], []
     for i in idx:
-        parts = ob.parts(d["clip"][i], d["hist"][i], exclude=pos_in_team.get(int(i)))  # leave itself out
+        parts = ob.parts(d["clip"][i], d["hist"][i], d["style"][i], exclude=pos_in_team.get(int(i)))  # leave itself out
         a = d["aesthetic"][i]
         ap = float(_ecdf(team_aes, a)[0]) if np.isfinite(a) and len(team_aes) else 0.5
         X.append(_approval_x(parts, d["style"][i], ranges, d["typo"][i], typo_ranges, ap))
@@ -487,9 +520,20 @@ def _approval(d: dict, ob: "_OnBrand", team_rows: np.ndarray, ranges: dict, typo
         m = make_pipeline(StandardScaler(), LogisticRegression(C=0.3, class_weight="balanced", max_iter=2000))
         pred[te] = m.fit(X[tr], y[tr]).predict_proba(X[te])[:, 1]
     auc = float(roc_auc_score(y, pred))
-    status.update({"auc": round(auc, 3), "pairs_right": pair_rate(pred)[0]})
-    if auc < MIN_APPROVAL_AUC:
-        status["why_off"] = f"leave-one-project-out AUC {auc:.2f} is below {MIN_APPROVAL_AUC}"
+    rng = np.random.default_rng(0)
+    boots = []
+    for _ in range(300):
+        b = rng.integers(0, len(y), len(y))
+        if y[b].min() != y[b].max():
+            boots.append(roc_auc_score(y[b], pred[b]))
+    ci_low = float(np.percentile(boots, 5)) if boots else 0.0
+    ob_auc = status.get("on_brand_auc") or 0.5
+    status.update({"auc": round(auc, 3), "auc_ci_low": round(ci_low, 3), "pairs_right": pair_rate(pred)[0]})
+    why = (f"leave-one-project-out AUC {auc:.2f} is below {MIN_APPROVAL_AUC}" if auc < MIN_APPROVAL_AUC else
+           f"not reliably better than guessing yet (low end of its 90% interval: {ci_low:.2f})" if ci_low <= APPROVAL_CI_LOW else
+           f"no better than the on-brand score on these designs ({auc:.2f} vs {ob_auc:.2f})" if auc < ob_auc - 0.02 else None)
+    if why:
+        status["why_off"] = why
         return None, status
     model = make_pipeline(StandardScaler(), LogisticRegression(C=0.3, class_weight="balanced", max_iter=2000)).fit(X, y)
     w = float(min(MAX_APPROVAL_WEIGHT, 2 * (auc - 0.5)))
@@ -511,8 +555,8 @@ def _usable_near_misses(d, is_aug):
     return keep
 
 
-def _onbrand_scores(ob: _OnBrand, clip, hist) -> np.ndarray:
-    return np.array([ob.parts(clip[i], hist[i])["on_brand"] for i in range(len(clip))])
+def _onbrand_scores(ob: _OnBrand, clip, hist, style=None) -> np.ndarray:
+    return np.array([ob.parts(clip[i], hist[i], None if style is None else style[i])["on_brand"] for i in range(len(clip))])
 
 
 def train(team_id: int) -> dict:
@@ -545,11 +589,11 @@ def train(team_id: int) -> dict:
         neg = is_other | is_aug
         tr = (is_team | neg) & ~test
         clf = _classifier(d["clip"][tr], d["style"][tr], is_team[tr])
-        ob = _OnBrand(d["clip"][tr & is_team], d["hist"][tr & is_team])
+        ob = _OnBrand(d["clip"][tr & is_team], d["hist"][tr & is_team], d["style"][tr & is_team])
         te = test & (is_team | is_other)
         y = is_team[te].astype(int)
         p_clf = clf.predict_proba(_X(d["clip"][te], d["style"][te]))[:, 1]
-        p_ob = _onbrand_scores(ob, d["clip"][te], d["hist"][te])
+        p_ob = _onbrand_scores(ob, d["clip"][te], d["hist"][te], d["style"][te])
         auc_c, auc_o = float(roc_auc_score(y, p_clf)), float(roc_auc_score(y, p_ob))
         w_clf = _blend_weight(auc_c, auc_o)
         vibe = 100 * (w_clf * p_clf + (1 - w_clf) * p_ob)
@@ -567,12 +611,12 @@ def train(team_id: int) -> dict:
                                         "other": [round(float(v), 1) for v in vibe[y == 0]]}})
 
     # ---- final model on everything (real rejects excluded)
-    ob = _OnBrand(d["clip"][is_team], d["hist"][is_team])
+    ob = _OnBrand(d["clip"][is_team], d["hist"][is_team], d["style"][is_team])
     clf = _classifier(d["clip"][is_team | is_other | is_aug], d["style"][is_team | is_other | is_aug],
                       is_team[is_team | is_other | is_aug]) if use_clf else None
 
     def total(clip, style, hist):
-        o = _onbrand_scores(ob, clip, hist)
+        o = _onbrand_scores(ob, clip, hist, style)
         if clf is None:
             return 100 * o
         return 100 * (w_clf * clf.predict_proba(_X(clip, style))[:, 1] + (1 - w_clf) * o)
@@ -681,7 +725,7 @@ def score(team_id: int, images: list[Image.Image], description: str = "", kind: 
                  "weights": {"classifier": round(w_clf, 3), "on_brand": round(1 - w_clf, 3)}}
 
     def image_score(clip, style, hist):
-        p = ob.parts(clip, hist)
+        p = ob.parts(clip, hist, style)
         s = p["on_brand"] if clf is None else (w_clf * float(clf.predict_proba(_X(clip[None], style[None]))[0, 1])
                                                + (1 - w_clf) * p["on_brand"])
         return 100 * s, p
@@ -702,6 +746,8 @@ def score(team_id: int, images: list[Image.Image], description: str = "", kind: 
         out["components"].update({"looks_like": round(parts["looks_like"], 3),
                                   "colour_match": round(parts["colour_match"], 3),
                                   "on_brand": round(parts["on_brand"], 3), "image_score": round(img_score, 1)})
+        if "style_match" in parts:
+            out["components"]["style_match"] = round(parts["style_match"], 3)
         if clf is not None:
             out["components"]["classifier"] = round(float(np.mean(clf.predict_proba(_X(clip, style))[:, 1])), 3)
         out["per_image"] = [round(image_score(clip[i], style[i], hists[i])[0], 1) for i in range(len(feats))]
@@ -775,6 +821,13 @@ def score(team_id: int, images: list[Image.Image], description: str = "", kind: 
     ranges = art["ranges"]
     if plan_style is not None:
         lp, cp = out["components"]["looks_like"], out["components"]["colour_match"]
+        sp = out["components"].get("style_match")
+        if sp is not None:
+            reasons.append({"ok": sp >= 0.15, "feature": "style_match", "label": "Style vs similar past posts",
+                            "deviation": round((0.5 - sp) * 2, 2),
+                            "text": (f"Brightness, saturation, busyness, empty space and contrast together match this team's posts on similar topics better than {_pct(sp)}% of its own posts do."
+                                     if sp >= 0.15 else
+                                     f"The mix of brightness, saturation, busyness, empty space and contrast is unlike this team's posts on similar topics (closer than only {_pct(sp)}% of its own posts). The bars below show which ones.")})
         reasons.append({"ok": cp >= 0.15, "feature": "colour_match", "label": "Colours vs similar past posts",
                         "deviation": round((0.5 - cp) * 2, 2),
                         "text": (f"Colours match this team's past posts on similar topics better than {_pct(cp)}% of its own posts do."

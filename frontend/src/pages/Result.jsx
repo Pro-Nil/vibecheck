@@ -65,7 +65,7 @@ export default function ResultPage({ checkId }) {
             {c.vs_new_posts != null && <> It fits better than <strong>{pct(c.vs_new_posts)}%</strong> of the posts this team actually published next (tested on posts the model had not seen).</>}
           </p>
           <p className="small muted">
-            {c.components.looks_like !== undefined && <>Overall look {pct(c.components.looks_like)} · colours vs similar-topic posts {pct(c.components.colour_match)}</>}
+            {c.components.looks_like !== undefined && <>Overall look {pct(c.components.looks_like)} · colours vs similar-topic posts {pct(c.components.colour_match)}{c.components.style_match !== undefined && <> · style vs similar-topic posts {pct(c.components.style_match)}</>}</>}
             {c.components.classifier !== undefined && <> · looks like the team vs other pages {pct(c.components.classifier)}%</>}
             {c.components.text !== undefined && <> · description fit {pct(c.components.text)}%</>}
             {c.components.approval !== undefined && <> · learned approval {pct(c.components.approval)}% (weight {pct(c.weights.approval)}%)</>}

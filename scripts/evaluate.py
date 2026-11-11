@@ -43,6 +43,9 @@ def load(dino: bool):
          "clip": np.stack([np.frombuffer(r[6], np.float32) for r in rows]),
          "hist": np.stack([np.frombuffer(r[7], np.float32) for r in rows]),
          "typo": [json.loads(r[8]) if r[8] else {} for r in rows], "paths": [r[2] for r in rows]}
+    from vibe.features import STYLE_KEYS
+    st = {r[0]: r[1:] for r in c.execute(f"select post_id, {', '.join(STYLE_KEYS)} from features")}
+    d["style"] = np.array([st[i] for i in d["id"]], np.float32)
     if dino:
         cache = dict(np.load(CACHE)) if CACHE.exists() else {}
         if "ids" in cache and np.array_equal(cache["ids"], d["id"]):
@@ -243,9 +246,11 @@ class AppScorer:
     def pct(self, items, ref):
         from vibe.model import _OnBrand
         ref = np.asarray(ref)
-        ob = _OnBrand(self.d["clip"][ref], self.d["hist"][ref])
+        st = self.d.get("style")
+        ob = _OnBrand(self.d["clip"][ref], self.d["hist"][ref], None if st is None else st[ref])
         pos = {int(r): j for j, r in enumerate(ref)}
-        return np.array([ob.parts(self.d["clip"][i], self.d["hist"][i], exclude=pos.get(int(i)))["on_brand"] for i in items])
+        return np.array([ob.parts(self.d["clip"][i], self.d["hist"][i], None if st is None else st[i],
+                                  exclude=pos.get(int(i)))["on_brand"] for i in items])
 
 
 def build(d, dino: bool):
