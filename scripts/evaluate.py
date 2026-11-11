@@ -32,11 +32,11 @@ CACHE = ROOT / "data" / "eval_cache.npz"
 
 
 # ----------------------------------------------------------------------------- data
-def load(dino: bool):
+def load(dino: bool, team_id: int = 1):
     c = sqlite3.connect(config.DATA_DIR / "vibecheck.db")
     rows = c.execute("select p.id, p.label, p.image_path, p.posted_at, p.decision, p.project, f.clip, f.hist, "
                      "f.typo_json, f.aesthetic from posts p join features f on f.post_id=p.id "
-                     "where p.label in ('team','rejected') order by p.id").fetchall()
+                     "where p.label in ('team','rejected') and p.team_id=? order by p.id", (team_id,)).fetchall()
     d = {"id": np.array([r[0] for r in rows]), "label": np.array([r[1] for r in rows], object),
          "month": np.array([(r[3] or "9999-99")[:7] for r in rows], object),
          "decision": np.array([r[4] or "" for r in rows], object), "project": [r[5] for r in rows],
@@ -292,8 +292,9 @@ if __name__ == "__main__":
     ap = argparse.ArgumentParser()
     ap.add_argument("--dino", action="store_true", help="also test DINOv2-base (downloads ~350 MB once)")
     ap.add_argument("--only", nargs="*", help="names of scorers to run")
+    ap.add_argument("--team", type=int, default=1)
     a = ap.parse_args()
-    data = load(a.dino)
+    data = load(a.dino, a.team)
     scs = build(data, a.dino)
     if a.only:
         scs = {k: v for k, v in scs.items() if k in a.only}

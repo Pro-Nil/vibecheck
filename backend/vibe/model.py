@@ -74,6 +74,7 @@ MIN_DECIDED = 8           # accepted AND rejected designs needed before the appr
 MIN_PROJECTS = 3          # ...from at least this many different projects (briefs)
 MIN_APPROVAL_AUC = 0.60   # leave-one-project-out AUC it must reach to be used
 MAX_APPROVAL_WEIGHT = 0.6
+APPROVAL_CLIP_PCS = 0     # CLIP directions for the approval model; 8 and 16 tested on the demo team: no gain, so off
 # Switch-on rule, from scripts/simulate_seniors.py: with 5-12 projects the leave-one-project-out AUC swings
 # +/-0.10-0.15, so a fixed 0.60 bar lets a lucky model in. It must also be better than guessing at the low end
 # of a bootstrap 90 % interval, and not worse than the plain on-brand score on the same designs.
@@ -446,8 +447,9 @@ def _style_map(d: dict, max_other: int = 1500):
 
 
 # --------------------------------------------------------------------- approval
-APPROVAL_INPUTS = (["looks_like", "colour_match"] + [f"off_{k}" for k in STYLE_KEYS]
-                   + ["off_text_area", "off_headline", "off_low_contrast_share", "weak_headline", "appeal"])
+APPROVAL_INPUTS = (["looks_like", "colour_match", "style_match"] + [f"off_{k}" for k in STYLE_KEYS]
+                   + ["off_text_area", "off_headline", "off_low_contrast_share", "weak_headline", "appeal"]
+                   + [f"look_direction_{i + 1}" for i in range(32)])
 
 
 def _off(v: float | None, r: dict | None) -> float:
@@ -459,15 +461,31 @@ def _off(v: float | None, r: dict | None) -> float:
 
 
 def _approval_x(parts: dict, style: np.ndarray, ranges: dict, typo: dict | None, typo_ranges: dict,
-                appeal_pct: float) -> np.ndarray:
+                appeal_pct: float, clip_pcs: np.ndarray | None = None) -> np.ndarray:
     t = typo or {}
-    x = [parts["looks_like"], parts["colour_match"]]
+    x = [parts["looks_like"], parts["colour_match"], parts.get("style_match", 0.5)]
     x += [_off(float(style[i]), ranges[k]) for i, k in enumerate(STYLE_KEYS)]
     x += [_off(t.get("text_area"), typo_ranges.get("text_area")), _off(t.get("headline"), typo_ranges.get("headline")),
           _off(finish._weak_share(t), typo_ranges.get("weak_share")),
           float((finish._headline_contrast(t) or 21.0) < finish.MIN_CONTRAST),
           appeal_pct]
+    if clip_pcs is not None:
+        x += list(clip_pcs)
     return np.array(x, np.float32)
+
+
+def _clip_basis(team_clip: np.ndarray, k: int):
+    """Main directions of variation among the team's posts (PCA); lets the approval model pick up visual
+    traits the readable features miss (type character, small clutter)."""
+    if k <= 0 or len(team_clip) <= k:
+        return None
+    mu = team_clip.mean(0)
+    _, _, vt = np.linalg.svd(team_clip - mu, full_matrices=False)
+    return mu.astype(np.float32), vt[:k].astype(np.float32)
+
+
+def _pcs(basis, v):
+    return None if basis is None else (np.asarray(v, np.float32) - basis[0]) @ basis[1].T
 
 
 def _approval(d: dict, ob: "_OnBrand", team_rows: np.ndarray, ranges: dict, typo_ranges: dict,
@@ -488,12 +506,13 @@ def _approval(d: dict, ob: "_OnBrand", team_rows: np.ndarray, ranges: dict, typo
               "on": False}
     if len(idx) == 0:
         return None, status
+    basis = _clip_basis(d["clip"][team_rows], APPROVAL_CLIP_PCS)
     X, ob_score = [], []
     for i in idx:
         parts = ob.parts(d["clip"][i], d["hist"][i], d["style"][i], exclude=pos_in_team.get(int(i)))  # leave itself out
         a = d["aesthetic"][i]
         ap = float(_ecdf(team_aes, a)[0]) if np.isfinite(a) and len(team_aes) else 0.5
-        X.append(_approval_x(parts, d["style"][i], ranges, d["typo"][i], typo_ranges, ap))
+        X.append(_approval_x(parts, d["style"][i], ranges, d["typo"][i], typo_ranges, ap, _pcs(basis, d["clip"][i])))
         ob_score.append(parts["on_brand"])
     X, ob_score = np.array(X), np.array(ob_score)
 
@@ -541,7 +560,7 @@ def _approval(d: dict, ob: "_OnBrand", team_rows: np.ndarray, ranges: dict, typo
     status.update({"on": True, "weight": round(w, 3),
                    "top_inputs": [{"input": APPROVAL_INPUTS[j], "coef": round(float(coefs[j]), 3)}
                                   for j in np.argsort(-np.abs(coefs))[:5]]})
-    return {"model": model, "weight": w}, status
+    return {"model": model, "weight": w, "basis": basis}, status
 
 
 # --------------------------------------------------------------------- train
@@ -785,7 +804,7 @@ def score(team_id: int, images: list[Image.Image], description: str = "", kind: 
         appr = art.get("approval")
         if appr is not None:
             x = _approval_x(parts, plan_style, art["ranges"], typo, art.get("typo_ranges", {}),
-                            appeal["percentile"] if appeal else 0.5)
+                            appeal["percentile"] if appeal else 0.5, _pcs(appr.get("basis"), plan_vec))
             p_ok = float(appr["model"].predict_proba(x[None])[0, 1])
             out["components"]["approval"] = round(p_ok, 3)
             out["weights"]["approval"] = round(appr["weight"], 3)
