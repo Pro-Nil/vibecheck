@@ -72,7 +72,7 @@ MIN_DECIDED = 8           # accepted AND rejected designs needed before the appr
 MIN_PROJECTS = 3          # ...from at least this many different projects (briefs)
 MIN_APPROVAL_AUC = 0.60   # leave-one-project-out AUC it must reach to be used
 MAX_APPROVAL_WEIGHT = 0.6
-ARTIFACT_VERSION = 4
+ARTIFACT_VERSION = 5          # v5: CLIP sees the whole poster (padded), vectors re-embedded
 _cache: dict[int, tuple[int, dict]] = {}
 _cache_lock = threading.Lock()
 

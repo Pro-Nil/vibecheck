@@ -93,6 +93,7 @@ class Feature(Base):
     hist: Mapped[bytes | None] = mapped_column(LargeBinary, nullable=True)   # 64-bin Lab colour histogram
     aesthetic: Mapped[float | None] = mapped_column(Float, nullable=True)    # LAION appeal score
     typo_json: Mapped[str | None] = mapped_column(Text, nullable=True)       # finish.typography() summary
+    clip_ver: Mapped[str | None] = mapped_column(String(80), nullable=True)  # features.EMBED_VERSION used
     post: Mapped[Post] = relationship(back_populates="features")
 
     @property
@@ -222,7 +223,8 @@ SessionLocal = sessionmaker(bind=engine, expire_on_commit=False)
 _ADDED_COLUMNS = [("features", "hist", "BLOB"), ("features", "aesthetic", "FLOAT"),
                   ("features", "typo_json", "TEXT"), ("posts", "decision", "VARCHAR(16)"),
                   ("posts", "project", "VARCHAR(120)"), ("checks", "kind", "VARCHAR(10)"),
-                  ("checks", "parent_id", "INTEGER"), ("checks", "project", "VARCHAR(120)")]
+                  ("checks", "parent_id", "INTEGER"), ("checks", "project", "VARCHAR(120)"),
+                  ("features", "clip_ver", "VARCHAR(80)")]
 
 
 def init_db() -> None:

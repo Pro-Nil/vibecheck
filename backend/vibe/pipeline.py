@@ -34,11 +34,45 @@ def compute_missing_features(team_id: int, progress: Progress | None = None, bat
                 s.add(Feature(post_id=p.id, clip=f["clip"].astype(np.float32).tobytes(),
                               palette_json=json.dumps(f["palette"]),
                               hist=f["hist"].astype(np.float32).tobytes(), aesthetic=f["aesthetic"],
+                              clip_ver=features.EMBED_VERSION,
                               **{k: float(f[k]) for k in features.STYLE_KEYS}))
             s.commit()
         done += len(ok)
         if progress:
             progress(done / max(1, len(todo)), f"Computed features for {done}/{len(todo)} images")
+    return done
+
+
+def reembed_outdated(team_id: int, progress: Progress | None = None, batch: int = 16) -> int:
+    """Recompute CLIP vectors (and what depends on them) for posts embedded by another set-up
+    (model, weights or framing), so every vector in a team is comparable."""
+    with SessionLocal() as s:
+        todo = s.execute(select(Feature.post_id, Post.image_path).join(Post).where(
+            Post.team_id == team_id, (Feature.clip_ver.is_(None)) | (Feature.clip_ver != features.EMBED_VERSION))).all()
+    done = 0
+    for i in range(0, len(todo), batch):
+        chunk, imgs = [], []
+        for pid, path in todo[i:i + batch]:
+            try:
+                imgs.append(features.load_image(config.DATA_DIR / path))
+                chunk.append(pid)
+            except Exception:
+                continue
+        if not imgs:
+            continue
+        vecs = features.embed_images(imgs)
+        with SessionLocal() as s:
+            for pid, v in zip(chunk, vecs):
+                f = s.get(Feature, pid)
+                f.clip = v.astype(np.float32).tobytes()
+                f.text_amount = features._zero_shot(v, "text_amount")
+                f.illustration = features._zero_shot(v, "illustration")
+                f.aesthetic = features.aesthetic(v)
+                f.clip_ver = features.EMBED_VERSION
+            s.commit()
+        done += len(chunk)
+        if progress:
+            progress(done / max(1, len(todo)), f"Re-embedding older images with the current model ({done}/{len(todo)})")
     return done
 
 
@@ -160,6 +194,7 @@ def run_refresh(job_id: int, team_id: int, fetch: bool = True, max_posts: int = 
         compute_missing_features(team_id, stage(0.35, 0.35))
         make_near_misses(team_id, progress=stage(0.70, 0.03))
         compute_missing_features(team_id, stage(0.73, 0.05))
+        reembed_outdated(team_id, stage(0.76, 0.02))
         backfill_features(team_id, stage(0.78, 0.07))
         _update_job(job_id, progress=0.85, message="Training the vibe model")
         mv = model.train(team_id)

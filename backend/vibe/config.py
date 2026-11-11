@@ -14,6 +14,9 @@ DB_URL = os.environ.get("VIBE_DB_URL", f"sqlite:///{(DATA_DIR / 'vibecheck.db').
 FAKE_CLIP = os.environ.get("VIBE_FAKE_CLIP") == "1"
 CLIP_MODEL = os.environ.get("VIBE_CLIP_MODEL", "ViT-B-32")
 CLIP_PRETRAINED = os.environ.get("VIBE_CLIP_PRETRAINED", "openai")
+# "pad": show CLIP the whole poster (padded to a square with its own edge colour). "center": CLIP's default
+# centre crop, which cuts ~10 % off the top and bottom of a 4:5 poster, where titles and logos usually are.
+CLIP_FRAMING = os.environ.get("VIBE_CLIP_FRAMING", "pad")
 
 # Daily refresh (fetch new posts + retrain). Hour in local time; set VIBE_SCHEDULER=0 to turn off.
 SCHEDULER_ON = os.environ.get("VIBE_SCHEDULER", "1") == "1"

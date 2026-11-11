@@ -45,6 +45,21 @@ STYLE_WORDS = {
 
 CLIP_DIM = 512
 _lock = threading.Lock()
+# Stored CLIP vectors are only comparable when made the same way; posts embedded differently are re-embedded.
+EMBED_VERSION = f"{config.CLIP_MODEL}/{config.CLIP_PRETRAINED}/{config.CLIP_FRAMING}" if not config.FAKE_CLIP else "fake"
+
+
+def pad_square(im: Image.Image) -> Image.Image:
+    """Pad to a square with the image's own (median) edge colour, so a centre crop keeps the whole poster."""
+    if im.width == im.height:
+        return im
+    a = np.asarray(im)
+    edge = np.concatenate([a[0], a[-1], a[:, 0], a[:, -1]]).reshape(-1, 3)
+    fill = tuple(int(v) for v in np.median(edge, 0))
+    s = max(im.size)
+    bg = Image.new("RGB", (s, s), fill)
+    bg.paste(im, ((s - im.width) // 2, (s - im.height) // 2))
+    return bg
 
 
 def load_image(path: str | Path) -> Image.Image:
@@ -95,6 +110,8 @@ class _OpenClip:
 
     def images(self, imgs):
         with self.torch.no_grad():
+            if config.CLIP_FRAMING == "pad":
+                imgs = [pad_square(im) for im in imgs]
             batch = self.torch.stack([self.preprocess(im) for im in imgs])
             return _norm(self.model.encode_image(batch).float().numpy())
 
