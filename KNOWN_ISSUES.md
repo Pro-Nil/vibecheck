@@ -10,7 +10,22 @@ rejects (was AUC 0.53 in v2). It is still tested on very little: all rejected dr
 2 accepted designs are on record.
 More decided designs (see "Improvements") are what would move it further.
 
-## 0000. Model v6 (12 Nov 2026): synthetic data used to test, not to train
+## 00000. Synthetic demo team (12 Nov 2026): the approval model, end to end
+
+The real team has 2 accepted designs, so the approval model can never switch on there. `scripts/make_demo_team.py`
+builds an imaginary team (generated posters, house style, other clubs, 40 briefs x 3 versions) whose simulated seniors
+decide with hidden weights per broken rule, plus noise and 10 % flipped decisions. `scripts/eval_demo_team.py`
+then tests on NEW briefs the model never saw.
+
+- Approval model switches on by itself: leave-one-brief-out AUC 0.81 (low end 0.76), on-brand alone 0.72.
+- On 60 unseen briefs: AUC accepted vs rejected **0.61 → 0.74** with the learned approval model; it picks the seniors'
+  favourite version in **55 % → 68 %** of briefs. Ceiling (the seniors' own score, given their inconsistency) 0.92.
+- Blind spots: font choice and small clutter (no feature describes them). Giving the approval model 8 or 16 CLIP
+  directions did not help (AUC 0.74 either way, lower leave-one-out), so `APPROVAL_CLIP_PCS = 0`.
+- Read it as "the machinery learns a consistent taste from about 120 decided designs", not as accuracy on a real team:
+  the seniors here follow rules we wrote.
+
+ (12 Nov 2026): synthetic data used to test, not to train
 
 Made-up data cannot teach the seniors' taste (train and test on my own fakes and the score means nothing), so it
 was used two ways, each guarded by the real time-forward evaluation:

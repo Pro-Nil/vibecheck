@@ -21,6 +21,16 @@ FDE1 course project (IIT Kanpur, 2026-27).
   calibrated on the team's own posts), "plan vs final" when linked to the plan check, and the learned approval
   model once it has enough data. Mark what the seniors decided and that design becomes training data.
 
+## Try it without any private data: the synthetic demo team
+
+```bash
+.venv/Scripts/python scripts/make_demo_team.py      # ~6 min: generates "Demo Studio (synthetic)" into data_demo/ and trains
+.venv/Scripts/python scripts/eval_demo_team.py      # held-out test on new briefs
+```
+Then run the app with `VIBE_DATA_DIR=data_demo`. Demo Studio is an imaginary team with generated posters and simulated
+seniors (hidden rules + 10 % inconsistent decisions), so the approval model has enough decided designs to switch on.
+It shows the learning loop works; it says nothing about a real team's taste. See [DEMO.md](DEMO.md).
+
 ## Run it
 
 ```bash
