@@ -46,15 +46,32 @@ export default function ProfilePage({ teamId, team }) {
 
       <section className="card" aria-labelledby="health-h">
         <h2 id="health-h">Model health</h2>
-        <p className="sub">Tested on 20% of posts the model never saw. Model v{p.model_version}, trained {fmtDate(p.trained_at)}.</p>
+        <p className="sub">Mode: <strong>{m.mode || 'classifier'}</strong>. Model v{p.model_version}, trained {fmtDate(p.trained_at)}.
+          {' '}The on-brand score compares a plan with this team's own posts: 30 means "more on-brand than 30% of them".</p>
         <div className="tiles">
-          <div className="tile"><div className="v">{m.auc ?? '—'}</div><div className="l">AUC: telling our posts from others (1.0 = perfect, 0.5 = guessing)</div></div>
-          <div className="tile"><div className="v">{m.accuracy != null ? `${pct(m.accuracy)}%` : '—'}</div><div className="l">correct at the "likely approved" line</div></div>
-          <div className="tile"><div className="v">{m.team_posts_passing != null ? `${pct(m.team_posts_passing)}%` : '—'}</div><div className="l">of unseen team posts score "likely approved"</div></div>
-          <div className="tile"><div className="v">{m.real_rejects ? `${m.real_rejects.below_approve} / ${m.real_rejects.n}` : '—'}</div><div className="l">real rejected drafts caught</div></div>
-          <div className="tile"><div className="v">{m.auc_vs_near_misses ?? '—'}</div><div className="l">AUC against near-misses (harder)</div></div>
-          {m.weights && <div className="tile"><div className="v">{pct(m.weights.classifier)} / {pct(m.weights.similarity)}</div><div className="l">score mix: classifier / similarity, set by how well each did on unseen posts</div></div>}
-          <div className="tile"><div className="v">{m.engagement ?`${m.engagement.mae} vs ${m.engagement.baseline_mae}` : '—'}</div><div className="l">engagement error vs. always-"usual" baseline (lower is better)</div></div>
+          {m.auc != null && <div className="tile"><div className="v">{m.auc}</div><div className="l">AUC on unseen posts: our posts vs other pages (1.0 = perfect, 0.5 = guessing)</div></div>}
+          {m.accuracy != null && <div className="tile"><div className="v">{pct(m.accuracy)}%</div><div className="l">correct at the on-brand line (unseen posts)</div></div>}
+          <div className="tile"><div className="v">{m.real_rejects ? `${m.real_rejects.below_approve} / ${m.real_rejects.n}` : '—'}</div><div className="l">real rejected drafts below the on-brand line{m.real_rejects ? ` (${m.real_rejects.below_borderline} below borderline)` : ''}. A check, not proof: accepted one-off posters can score low too.</div></div>
+          {m.approval && (
+            <div className="tile">
+              <div className="v">{m.approval.on ? `On · ${m.approval.auc}` : 'Off'}</div>
+              <div className="l">
+                Approval model (learns from designs the seniors decided on: {m.approval.n_accepted} accepted, {m.approval.n_rejected} rejected, {m.approval.n_projects} projects).{' '}
+                {m.approval.on
+                  ? `AUC ${m.approval.auc} leaving out one project at a time; ${pct(m.approval.weight)}% of final-design scores.`
+                  : `Needs ${[m.approval.needs.accepted && `${m.approval.needs.accepted} more accepted`, m.approval.needs.rejected && `${m.approval.needs.rejected} more rejected`, m.approval.needs.projects && `${m.approval.needs.projects} more project${m.approval.needs.projects > 1 ? 's' : ''}`].filter(Boolean).join(', ') || 'a better result than guessing'}. Mark outcomes in History or upload decided designs in Team setup.`}
+              </div>
+            </div>
+          )}
+          {m.approval?.n_pairs > 0 && (
+            <div className="tile">
+              <div className="v">{pct(m.approval.on_brand_pairs_right)}%</div>
+              <div className="l">of {m.approval.n_pairs} accepted-vs-rejected pairs from the same project where the on-brand score put the accepted design higher (50% = guessing)</div>
+            </div>
+          )}
+          {m.near_misses_below_approve != null && <div className="tile"><div className="v">{pct(m.near_misses_below_approve)}%</div><div className="l">of auto-made broken copies score below the on-brand line</div></div>}
+          {m.weights && m.weights.classifier > 0 && <div className="tile"><div className="v">{pct(m.weights.classifier)} / {pct(m.weights.on_brand)}</div><div className="l">score mix: classifier / on-brand, set by how well each did on unseen posts</div></div>}
+          <div className="tile"><div className="v">{m.engagement ? `${m.engagement.mae} vs ${m.engagement.baseline_mae}` : '—'}</div><div className="l">likes error vs always-"usual" guess (lower is better){m.engagement?.model ? `; model: ${m.engagement.model}` : ''}</div></div>
         </div>
       </section>
 

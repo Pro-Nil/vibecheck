@@ -179,3 +179,100 @@ def test_description_matters_without_other_pages(client, dataset):
         assert 0.0 <= text <= 1.0
         scores.add(text)
     assert len(scores) >= 3  # different descriptions give different text scores
+
+
+def test_on_brand_only_mode_ranks_team_style_higher(client, dataset):
+    """Without other pages the score is a percentile against the team's own posts."""
+    t = next(x for x in client.get("/teams").json() if x["name"] == "Team only")
+    m = client.get(f"/teams/{t['id']}/model").json()["current"]["metrics"]
+    assert m["mode"].startswith("on-brand only")
+    assert m["weights"]["classifier"] == 0
+    def check(img):
+        r = client.post(f"/teams/{t['id']}/checks", files=[("images", ("a.png", png(img), "image/png"))])
+        assert r.status_code == 201, r.text
+        return r.json()
+    good, bad = check(team_style_image(321)), check(other_style_image(321))
+    assert "classifier" not in good["components"]
+    # synthetic team posters are near-identical, so scores bunch up; the ranking is what matters
+    assert good["score"] > bad["score"] + 10
+    assert good["components"]["on_brand"] > bad["components"]["on_brand"]
+    assert bad["verdict"] == "Off-brand"
+    assert {"looks_like", "colour_match", "on_brand"} <= set(good["components"])
+    assert good["appeal"] is None or 0 <= good["appeal"]["percentile"] <= 1
+
+
+# ------------------------------------------------------------------ v3: finished designs + approval
+def _text_poster(fg, bg, seed=0):
+    from PIL import ImageDraw
+    im = team_style_image(seed)
+    d = ImageDraw.Draw(im)
+    d.rectangle([40, 300, 280, 340], fill=bg)
+    for x in range(50, 270, 12):  # letter-like strokes
+        d.rectangle([x, 308, x + 6, 332], fill=fg)
+    return im
+
+
+def test_box_contrast():
+    import numpy as np
+    from vibe import finish
+    def ratio(fg, bg):
+        a = np.full((40, 200, 3), bg, np.uint8)
+        a[10:30, 10:190:8] = fg
+        return finish.box_contrast(a, [0, 200, 0, 40])
+    assert ratio((0, 0, 0), (255, 255, 255)) > 15
+    assert ratio((120, 120, 120), (135, 135, 135)) < 1.5
+
+
+def test_final_check_has_finish_checklist(client, team):
+    one = [("images", ("final.png", png(_text_poster((0, 0, 0), (255, 255, 255))), "image/png"))]
+    r = client.post(f"/teams/{team['id']}/checks", files=one, data={"kind": "final"})
+    assert r.status_code == 201, r.text
+    c = r.json()
+    assert c["kind"] == "final" and c["finish"] is not None
+    feats = {i["feature"] for i in c["finish"]["checks"]}
+    assert "resolution" in feats
+    res = next(i for i in c["finish"]["checks"] if i["feature"] == "resolution")
+    assert res["ok"] is False  # 320 px wide is below Instagram's 1080
+    assert c["confidence"]["level"] in ("low", "medium", "high")
+    two = one + [("images", ("b.png", png(team_style_image(5)), "image/png"))]
+    assert client.post(f"/teams/{team['id']}/checks", files=two, data={"kind": "final"}).status_code == 400
+
+
+def test_final_links_to_plan_and_outcome_becomes_decision(client, team):
+    plan = client.post(f"/teams/{team['id']}/checks", data={"project": "spring-fest"},
+                       files=[("images", ("p.png", png(team_style_image(950)), "image/png"))]).json()
+    final = client.post(f"/teams/{team['id']}/checks",
+                        data={"kind": "final", "plan_check_id": str(plan["id"])},
+                        files=[("images", ("f.png", png(team_style_image(951)), "image/png"))]).json()
+    pvf = final["plan_vs_final"]
+    assert pvf["plan_check_id"] == plan["id"] and pvf["plan_score"] == plan["score"]
+    assert 0 <= pvf["similarity_pct"] <= 1
+    assert final["project"] == "spring-fest"  # inherited from the plan
+    assert client.get(f"/checks/{plan['id']}").json()["finals"][0]["id"] == final["id"]
+    # deciding on a final check records its own image as a decided design (no upload needed)
+    client.post(f"/checks/{final['id']}/outcome", data={"result": "rejected"})
+    rej = client.get(f"/teams/{team['id']}/posts", params={"label": "rejected", "limit": 100}).json()["items"]
+    mine = [p for p in rej if p["project"] == "spring-fest"]
+    assert len(mine) == 1 and mine[0]["decision"] == "rejected"
+
+
+def test_approval_model_needs_decisions_then_turns_on(client):
+    from conftest import other_style_image as other
+    t = client.post("/teams", json={"name": "Approval team", "other_pages": []}).json()
+    tid = t["id"]
+    files = [("files", (f"t{i}.png", png(team_style_image(2000 + i)), "image/png")) for i in range(30)]
+    wait(client, client.post(f"/teams/{tid}/import/upload", files=files, data={"label": "team"}).json()["job_id"])
+    ap = client.get(f"/teams/{tid}/model").json()["current"]["metrics"]["approval"]
+    assert ap["on"] is False and ap["needs"]["accepted"] == 8
+    for k, proj in enumerate(["a", "b", "c"]):  # 3 briefs, accepted = team style, rejected = off style
+        acc = [("files", (f"a{k}{i}.png", png(team_style_image(3000 + 10 * k + i)), "image/png")) for i in range(4)]
+        rej = [("files", (f"r{k}{i}.png", png(other(3000 + 10 * k + i)), "image/png")) for i in range(4)]
+        client.post(f"/teams/{tid}/import/upload", files=acc, data={"label": "accepted", "project": proj, "train": "false"})
+        j = client.post(f"/teams/{tid}/import/upload", files=rej, data={"label": "rejected", "project": proj}).json()
+        wait(client, j["job_id"])
+    ap = client.get(f"/teams/{tid}/model").json()["current"]["metrics"]["approval"]
+    assert ap["n_accepted"] == 12 and ap["n_rejected"] == 12 and ap["n_projects"] == 3
+    assert ap["on"] is True and ap["auc"] >= 0.8 and 0 < ap["weight"] <= 0.6
+    final = client.post(f"/teams/{tid}/checks", data={"kind": "final"},
+                        files=[("images", ("f.png", png(team_style_image(4000)), "image/png"))]).json()
+    assert "approval" in final["components"] and final["weights"]["approval"] == ap["weight"]

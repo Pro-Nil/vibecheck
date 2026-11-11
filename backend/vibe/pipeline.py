@@ -33,11 +33,43 @@ def compute_missing_features(team_id: int, progress: Progress | None = None, bat
             for p, f in zip(ok, feats):
                 s.add(Feature(post_id=p.id, clip=f["clip"].astype(np.float32).tobytes(),
                               palette_json=json.dumps(f["palette"]),
+                              hist=f["hist"].astype(np.float32).tobytes(), aesthetic=f["aesthetic"],
                               **{k: float(f[k]) for k in features.STYLE_KEYS}))
             s.commit()
         done += len(ok)
         if progress:
             progress(done / max(1, len(todo)), f"Computed features for {done}/{len(todo)} images")
+    return done
+
+
+def backfill_features(team_id: int, progress: Progress | None = None) -> int:
+    """Fill features added in later versions for posts imported earlier: colour histogram and appeal
+    (all posts), typography from text detection (team posts and rejected drafts only; it is slow)."""
+    from . import finish
+    with SessionLocal() as s:
+        rows = s.execute(select(Feature, Post.image_path, Post.label).join(Post).where(
+            Post.team_id == team_id,
+            (Feature.hist.is_(None)) | (Feature.aesthetic.is_(None))
+            | (Feature.typo_json.is_(None) & Post.label.in_(("team", "rejected")))) ).all()
+        done = 0
+        for n, (f, path, label) in enumerate(rows):
+            try:
+                img = features.load_image(config.DATA_DIR / path)
+            except Exception:
+                continue
+            if f.hist is None:
+                f.hist = features.colour_hist(img).tobytes()
+            if f.aesthetic is None:
+                f.aesthetic = features.aesthetic(f.vector)
+            if f.typo_json is None and label in ("team", "rejected"):
+                f.typo_json = json.dumps(finish.typography(img))
+            done += 1
+            if progress and n % 5 == 0:
+                progress(n / max(1, len(rows)), f"Reading text and layout of older images ({n}/{len(rows)})")
+                s.commit()
+        s.commit()
+    if progress and done:
+        progress(1.0, f"Updated {done} older images with new features")
     return done
 
 
@@ -127,10 +159,17 @@ def run_refresh(job_id: int, team_id: int, fetch: bool = True, max_posts: int = 
                     notes.append(f"@{h}: download failed ({type(e).__name__}: {str(e)[:120]})")
         compute_missing_features(team_id, stage(0.35, 0.35))
         make_near_misses(team_id, progress=stage(0.70, 0.03))
-        compute_missing_features(team_id, stage(0.73, 0.07))
-        _update_job(job_id, progress=0.8, message="Training the vibe model")
+        compute_missing_features(team_id, stage(0.73, 0.05))
+        backfill_features(team_id, stage(0.78, 0.07))
+        _update_job(job_id, progress=0.85, message="Training the vibe model")
         mv = model.train(team_id)
-        notes.append(f"model v{mv['id']} trained, hold-out AUC {mv['metrics'].get('auc')}")
+        m = mv["metrics"]
+        rj = m.get("real_rejects")
+        ap = m.get("approval", {})
+        notes.append(f"model v{mv['id']} trained ({m.get('mode')})"
+                     + (f", approval model on (AUC {ap.get('auc')})" if ap.get("on") else "")
+                     + (f", hold-out AUC {m['auc']}" if m.get("auc") is not None else "")
+                     + (f", {rj['below_approve']}/{rj['n']} rejected drafts below the on-brand line" if rj else ""))
         _update_job(job_id, status="done", progress=1.0, message="; ".join(notes), finished_at=now())
     except Exception as e:
         traceback.print_exc()

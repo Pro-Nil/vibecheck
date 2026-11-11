@@ -189,7 +189,36 @@ def style_features(img: Image.Image, clip_vec: np.ndarray) -> dict:
     }
 
 
+HIST_BINS = 4  # per Lab channel -> 64 numbers
+
+
+def colour_hist(img: Image.Image) -> np.ndarray:
+    """Share of the image in each of 4x4x4 Lab colour bins (sums to 1). Captures which colours a
+    poster is made of and in what amounts, which CLIP (mostly about subject matter) largely ignores."""
+    a = np.asarray(img.resize((96, 120)), np.uint8)
+    lab = cv2.cvtColor(a, cv2.COLOR_RGB2LAB)
+    h = cv2.calcHist([lab], [0, 1, 2], None, [HIST_BINS] * 3, [0, 256] * 3).reshape(-1)
+    return (h / max(1.0, h.sum())).astype(np.float32)
+
+
+@lru_cache(maxsize=1)
+def _aesthetic_weights():
+    f = config.ROOT / "models_pretrained" / "laion_aesthetic_vit_b_32.npz"
+    if not f.exists():
+        return None
+    z = np.load(f)
+    return z["weight"], float(z["bias"][0])
+
+
+def aesthetic(clip_vec: np.ndarray) -> float | None:
+    """LAION aesthetic score (about 1-10) from a normalised CLIP ViT-B/32 vector. General visual
+    appeal as rated by many people; it is NOT the team's taste, so it only feeds the likes model."""
+    w = _aesthetic_weights()
+    return None if w is None else float(np.asarray(clip_vec, np.float32) @ w[0] + w[1])
+
+
 def extract(imgs: list[Image.Image]) -> list[dict]:
-    """Full features for a list of images: {'clip': vector, style..., 'palette': [...]}"""
+    """Full features for a list of images: {'clip', style..., 'palette', 'hist', 'aesthetic'}"""
     vecs = embed_images(imgs)
-    return [{"clip": v, **style_features(im, v)} for im, v in zip(imgs, vecs)]
+    return [{"clip": v, **style_features(im, v), "hist": colour_hist(im), "aesthetic": aesthetic(v)}
+            for im, v in zip(imgs, vecs)]

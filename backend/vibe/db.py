@@ -42,6 +42,8 @@ class Team(Base):
 #   rejected  = a real draft the seniors sent back
 #   other     = a post from another page ("not our vibe")
 #   augmented = a deliberately broken copy of a team post (near-miss)
+# decision (optional) = what the seniors decided about this exact design: "accepted" | "rejected".
+#   Only designs with a decision train the approval model; project groups versions of one brief.
 LABELS = ("team", "rejected", "other", "augmented")
 
 
@@ -58,6 +60,8 @@ class Post(Base):
     posted_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     likes: Mapped[int | None] = mapped_column(Integer, nullable=True)
     comments: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    decision: Mapped[str | None] = mapped_column(String(16), nullable=True)   # accepted | rejected
+    project: Mapped[str | None] = mapped_column(String(120), nullable=True)   # brief this design was for
     created_at: Mapped[datetime] = mapped_column(DateTime, default=now)
     features: Mapped["Feature | None"] = relationship(back_populates="post", uselist=False,
                                                      cascade="all, delete-orphan")
@@ -66,7 +70,8 @@ class Post(Base):
         d = {"id": self.id, "team_id": self.team_id, "label": self.label,
              "source_page": self.source_page, "image_url": media_url(self.image_path),
              "caption": self.caption, "posted_at": self.posted_at.isoformat() if self.posted_at else None,
-             "likes": self.likes, "comments": self.comments}
+             "likes": self.likes, "comments": self.comments,
+             "decision": self.decision, "project": self.project}
         if with_features and self.features is not None:
             d["features"] = self.features.to_dict()
         return d
@@ -85,6 +90,9 @@ class Feature(Base):
     whitespace: Mapped[float] = mapped_column(Float)
     contrast: Mapped[float] = mapped_column(Float)
     illustration: Mapped[float] = mapped_column(Float)
+    hist: Mapped[bytes | None] = mapped_column(LargeBinary, nullable=True)   # 64-bin Lab colour histogram
+    aesthetic: Mapped[float | None] = mapped_column(Float, nullable=True)    # LAION appeal score
+    typo_json: Mapped[str | None] = mapped_column(Text, nullable=True)       # finish.typography() summary
     post: Mapped[Post] = relationship(back_populates="features")
 
     @property
@@ -110,6 +118,9 @@ class Check(Base):
     verdict: Mapped[str] = mapped_column(String(40))
     result_json: Mapped[str] = mapped_column(Text)
     model_version: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    kind: Mapped[str | None] = mapped_column(String(10), nullable=True)         # plan | final
+    parent_id: Mapped[int | None] = mapped_column(Integer, nullable=True)      # plan check a final belongs to
+    project: Mapped[str | None] = mapped_column(String(120), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=now)
     outcome: Mapped["Outcome | None"] = relationship(uselist=False, cascade="all, delete-orphan")
 
@@ -120,6 +131,7 @@ class Check(Base):
                   "inspo_urls": [media_url(p) for p in json.loads(self.inspo_json)],
                   "created_at": self.created_at.isoformat(),
                   "model_version": self.model_version,
+                  "kind": self.kind or "plan", "parent_id": self.parent_id, "project": self.project,
                   "outcome": self.outcome.result if self.outcome else None})
         return r
 
@@ -205,5 +217,19 @@ def _sqlite_pragmas(dbapi_conn, _):  # pragma: no cover - trivial
 SessionLocal = sessionmaker(bind=engine, expire_on_commit=False)
 
 
+# Columns added after the first release: (table, column, SQL type). init_db adds any that are missing,
+# so an existing database keeps working; pipeline.backfill_features fills them in.
+_ADDED_COLUMNS = [("features", "hist", "BLOB"), ("features", "aesthetic", "FLOAT"),
+                  ("features", "typo_json", "TEXT"), ("posts", "decision", "VARCHAR(16)"),
+                  ("posts", "project", "VARCHAR(120)"), ("checks", "kind", "VARCHAR(10)"),
+                  ("checks", "parent_id", "INTEGER"), ("checks", "project", "VARCHAR(120)")]
+
+
 def init_db() -> None:
     Base.metadata.create_all(engine)
+    from sqlalchemy import inspect, text
+    insp = inspect(engine)
+    with engine.begin() as conn:
+        for table, col, sqltype in _ADDED_COLUMNS:
+            if col not in {c["name"] for c in insp.get_columns(table)}:
+                conn.execute(text(f"ALTER TABLE {table} ADD COLUMN {col} {sqltype}"))
