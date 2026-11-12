@@ -1,14 +1,50 @@
 # Known issues and improvements
 
-Honest status as of 12 Nov 2026. Everything below was found by running the app on real data:
+Honest status as of 13 Nov 2026. Everything below was found by running the app on real data:
 74 posts from one fest's Instagram page (Mar–Nov 2026) and 9 drafts of one talk poster that the design
 team rejected, plus 2 posters the team accepted.
 
-**Short version:** the pipeline, API, plugins and dashboards work end to end. Model v6 (v5 + style match) ranks the team's real
+**Short version:** the pipeline, API, plugins and dashboards work end to end. Model v7 (v6 + layout, typeface and clutter features) ranks the team's real
 new posts above its rejected drafts (AUC 0.90 on posts it had not seen) and both accepted one-offs above all 9
 rejects (was AUC 0.53 in v2). It is still tested on very little: all rejected drafts come from one brief and only
 2 accepted designs are on record.
 More decided designs (see "Improvements") are what would move it further.
+
+## 000000. Model v7 (13 Nov 2026): layout, typeface and clutter features; a better confidence rule
+
+The held-out test above showed what the model could not see: the seniors' wrong-typeface, clutter and centred-layout
+rules (no feature described type or layout). v7 measures them from the image and the text boxes the detector already
+finds (`finish.layout`, stored with the typography summary; older posts are measured on the next retrain without
+running text detection again):
+
+- **Typeface**: stroke weight, stroke unevenness and letter-outline complexity of the headline (distance transform on
+  the letter pixels). **Layout**: title alignment. **Clutter**: small text fragments and small separate shapes away
+  from text.
+- Probe on generated posters (25 per rule, AUC vs clean; 0.5 = no signal): wrong typeface by stroke weight 0.00 and
+  outline 0.96; clutter by small text / small shapes 1.00 / 1.00; centred by title alignment 0.00.
+- They enter the approval model as "how far outside the team's usual range" (capped at 4 range widths).
+
+| Held-out test, 60 new briefs | v6 | **v7** |
+|---|---|---|
+| Final score AUC, accepted vs rejected | 0.74 | **0.81** |
+| Seniors' pick ranked first | 68 % | **77 %** |
+| Median score: clean / wrong typeface / clutter / cramped | 80 / 63 / 51 / 58 | **84 / 46 / 44 / 46** |
+
+Ceiling stays 0.92 (the seniors' 10 % flipped decisions). Centred layouts still score high (75 → 73): the seniors
+care least about that rule (weight 0.5). Real data (Techkriti, approval model off): time-forward AUC **0.90**, unchanged,
+since the on-brand part did not change.
+
+**Tried and not kept:** a within-brief (pairwise) approval model. Leave-one-brief-out AUC 0.818 (current) vs 0.791
+(pairwise) vs 0.811 (both); same-brief pairs right 0.843 / 0.843 / 0.871. Within noise on 40 briefs, so not shipped.
+
+**Confidence rule.** "Low confidence: the team has posted little like this" used to fire when the look-alike
+percentile was below 10 %. On the synthetic team it flagged 23 % of clean on-style designs but only 10 % of other
+clubs' posters, the wrong way round; learning the 10 % from the team's newer posts changed nothing. v7 uses the
+similarity to the single closest team post, flagged below the level only 5 % of the team's own posts fall under
+(leave one out), so it adapts to how varied a team is. Flagged now: clean on-style 7 %, off-palette 40 %, other
+clubs' posters 57 %.
+
+Models trained before v7 keep working (without the new inputs and with the old confidence rule) until the team retrains.
 
 ## 00000. Synthetic demo team (12 Nov 2026): the approval model, end to end
 

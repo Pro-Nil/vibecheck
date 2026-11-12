@@ -97,10 +97,27 @@ def backfill_features(team_id: int, progress: Progress | None = None) -> int:
             if f.aesthetic is None:
                 f.aesthetic = features.aesthetic(f.vector)
             if f.typo_json is None and label in ("team", "rejected"):
-                f.typo_json = json.dumps(finish.typography(img))
+                f.typo_json = json.dumps(finish.typography_full(img))
             done += 1
             if progress and n % 5 == 0:
                 progress(n / max(1, len(rows)), f"Reading text and layout of older images ({n}/{len(rows)})")
+                s.commit()
+        s.commit()
+        # layout / typeface / clutter measures added later: computed from the stored text boxes (no text detection)
+        tag = f'"lv": {finish.LAYOUT_VERSION}'
+        old = s.execute(select(Feature, Post.image_path).join(Post).where(
+            Post.team_id == team_id, Feature.typo_json.is_not(None), ~Feature.typo_json.contains(tag))).all()
+        for n, (f, path) in enumerate(old):
+            try:
+                img = features.load_image(config.DATA_DIR / path)
+            except Exception:
+                continue
+            t = json.loads(f.typo_json)
+            t.update(finish.layout(img, t))
+            f.typo_json = json.dumps(t)
+            done += 1
+            if progress and n % 10 == 0:
+                progress(n / max(1, len(old)), f"Measuring layout and type of older images ({n}/{len(old)})")
                 s.commit()
         s.commit()
     if progress and done:

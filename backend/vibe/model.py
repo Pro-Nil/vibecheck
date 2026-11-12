@@ -79,7 +79,8 @@ APPROVAL_CLIP_PCS = 0     # CLIP directions for the approval model; 8 and 16 tes
 # +/-0.10-0.15, so a fixed 0.60 bar lets a lucky model in. It must also be better than guessing at the low end
 # of a bootstrap 90 % interval, and not worse than the plain on-brand score on the same designs.
 APPROVAL_CI_LOW = 0.5
-ARTIFACT_VERSION = 6          # v6: + style match vs same-topic posts (v5: CLIP sees the whole poster)
+ARTIFACT_VERSION = 7          # v7: + layout, typeface and clutter inputs (v6: style match vs same-topic posts)
+COMPATIBLE_VERSIONS = (6, 7)  # v6 models still score (without the v7 inputs) until the team retrains
 _cache: dict[int, tuple[int, dict]] = {}
 _cache_lock = threading.Lock()
 
@@ -271,6 +272,18 @@ def _new_post_scores(d: dict, is_team: np.ndarray) -> tuple[np.ndarray, str]:
     return np.array(out), "series held out"
 
 
+def novelty_floor(team_clip: np.ndarray) -> float | None:
+    """Similarity to the closest team post below which a design counts as unlike the team's work: the level only
+    ~5 % of the team's own posts fall under when compared with the rest of the team (leave one out). Adapts to how
+    varied the team is. (The earlier rule, look-alike percentile < 10 %, flagged clean on-style designs more often
+    than other clubs' posters on the synthetic team; see KNOWN_ISSUES.)"""
+    if len(team_clip) < 10:
+        return None
+    S = team_clip @ team_clip.T
+    np.fill_diagonal(S, -1.0)
+    return float(np.percentile(S.max(1), 5))
+
+
 def _calibrated_thresholds(d: dict, is_team: np.ndarray) -> tuple[dict, dict, np.ndarray]:
     scores, how = _new_post_scores(d, is_team)
     if len(scores) < MIN_CALIBRATION:
@@ -447,8 +460,10 @@ def _style_map(d: dict, max_other: int = 1500):
 
 
 # --------------------------------------------------------------------- approval
+USE_LAYOUT = True    # layout / typeface / clutter inputs (finish.LAYOUT_KEYS); see KNOWN_ISSUES for the test
 APPROVAL_INPUTS = (["looks_like", "colour_match", "style_match"] + [f"off_{k}" for k in STYLE_KEYS]
                    + ["off_text_area", "off_headline", "off_low_contrast_share", "weak_headline", "appeal"]
+                   + ([f"off_{k}" for k in finish.LAYOUT_KEYS] if USE_LAYOUT else [])
                    + [f"look_direction_{i + 1}" for i in range(32)])
 
 
@@ -461,7 +476,7 @@ def _off(v: float | None, r: dict | None) -> float:
 
 
 def _approval_x(parts: dict, style: np.ndarray, ranges: dict, typo: dict | None, typo_ranges: dict,
-                appeal_pct: float, clip_pcs: np.ndarray | None = None) -> np.ndarray:
+                appeal_pct: float, clip_pcs: np.ndarray | None = None, layout: bool = USE_LAYOUT) -> np.ndarray:
     t = typo or {}
     x = [parts["looks_like"], parts["colour_match"], parts.get("style_match", 0.5)]
     x += [_off(float(style[i]), ranges[k]) for i, k in enumerate(STYLE_KEYS)]
@@ -469,6 +484,8 @@ def _approval_x(parts: dict, style: np.ndarray, ranges: dict, typo: dict | None,
           _off(finish._weak_share(t), typo_ranges.get("weak_share")),
           float((finish._headline_contrast(t) or 21.0) < finish.MIN_CONTRAST),
           appeal_pct]
+    if layout:   # capped: a team with very uniform type has a narrow range, which would make offsets explode
+        x += [min(4.0, _off(t.get(k), typo_ranges.get(k))) for k in finish.LAYOUT_KEYS]
     if clip_pcs is not None:
         x += list(clip_pcs)
     return np.array(x, np.float32)
@@ -593,6 +610,8 @@ def train(team_id: int) -> dict:
                      "n_rejected": int(is_rej.sum())}
     rng = np.random.default_rng(0)
     thresholds, metrics["calibration"], new_post_scores = _calibrated_thresholds(d, is_team)
+    nf = novelty_floor(d["clip"][is_team])
+    metrics["calibration"]["novelty_floor"] = None if nf is None else round(nf, 4)
     w_clf = 0.0
 
     # ---- hold-out test (20 % of team posts + 20 % of other pages; near-misses follow their parent)
@@ -669,7 +688,7 @@ def train(team_id: int) -> dict:
     reducer, coords = _style_map(d)
     team_dates = [p for p, t in zip(d["posted_at"], is_team) if t and p]
     artifact = {
-        "version": ARTIFACT_VERSION, "onbrand": ob, "new_post_scores": new_post_scores, "approval": approval, "typo_ranges": typo_ranges, "clf": clf, "w_clf": w_clf, "thresholds": thresholds,
+        "version": ARTIFACT_VERSION, "onbrand": ob, "new_post_scores": new_post_scores, "novelty_floor": nf, "approval": approval, "typo_ranges": typo_ranges, "clf": clf, "w_clf": w_clf, "thresholds": thresholds,
         "team_vecs": d["clip"][is_team], "team_ids": d["id"][is_team], "other_vecs": d["clip"][other_rows],
         "team_aesthetic": team_aes,
         "ranges": ranges,
@@ -711,7 +730,7 @@ def latest(team_id: int) -> tuple[int, dict]:
         if hit and hit[0] == mv_id:
             return hit
         art = joblib.load(config.DATA_DIR / path)
-        if art.get("version") != ARTIFACT_VERSION:
+        if art.get("version") not in COMPATIBLE_VERSIONS:
             raise NotTrained("This team's model was trained by an older version. Retrain it from Team setup.")
         _cache[team_id] = (mv_id, art)
         return mv_id, art
@@ -802,7 +821,7 @@ def score(team_id: int, images: list[Image.Image], description: str = "", kind: 
     # ---- finished design: finish checks, learned approval, plan vs final
     out["finish"] = None
     if kind == "final":
-        typo = finish.typography(images[0])
+        typo = finish.typography_full(images[0])
         items = finish.checks(typo, art.get("typo_ranges", {}))
         out["finish"] = {"checks": items, "must_fix": sum(i["severity"] == "fail" for i in items),
                          "warnings": sum(i["severity"] == "warn" for i in items),
@@ -810,7 +829,8 @@ def score(team_id: int, images: list[Image.Image], description: str = "", kind: 
         appr = art.get("approval")
         if appr is not None:
             x = _approval_x(parts, plan_style, art["ranges"], typo, art.get("typo_ranges", {}),
-                            appeal["percentile"] if appeal else 0.5, _pcs(appr.get("basis"), plan_vec))
+                            appeal["percentile"] if appeal else 0.5, _pcs(appr.get("basis"), plan_vec),
+                            layout=USE_LAYOUT and art.get("version", 0) >= 7)
             p_ok = float(appr["model"].predict_proba(x[None])[0, 1])
             out["components"]["approval"] = round(p_ok, 3)
             out["weights"]["approval"] = round(appr["weight"], 3)
@@ -827,13 +847,17 @@ def score(team_id: int, images: list[Image.Image], description: str = "", kind: 
 
     # ---- how much to trust this score
     notes = []
-    if img_score is not None and out["components"]["looks_like"] < 0.10:
+    nf = art.get("novelty_floor")
+    if img_score is not None and nf is not None:      # closest team post, per image, then the typical image
+        sparse = float(np.median((clip @ ob.vecs.T).max(1))) < nf
+    else:
+        sparse = img_score is not None and out["components"]["looks_like"] < 0.10   # models trained before v7
+    if sparse:
         notes.append("the team has posted little like this, so there is not much to compare with")
     if len(ob.vecs) < 30:
         notes.append(f"the model knows only {len(ob.vecs)} team posts")
     if kind == "final" and art.get("approval") is None:
         notes.append("not enough accepted/rejected designs yet to learn what the seniors approve")
-    sparse = img_score is not None and out["components"]["looks_like"] < 0.10
     out["confidence"] = {"level": "low" if sparse or len(notes) >= 2 else "medium" if notes else "high",
                          "notes": notes}
     level, label = _verdict(total, th)

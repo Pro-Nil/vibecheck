@@ -118,6 +118,101 @@ def typography(img: Image.Image) -> dict:
     return out
 
 
+# ------------------------------------------------------------------ layout, typeface, clutter
+# Measured from the image plus the text boxes already found above, so older images do not need the slow text
+# detector again. Bump LAYOUT_VERSION when these change: training recomputes them for older posts.
+LAYOUT_VERSION = 1
+LAYOUT_KEYS = ("title_center", "stroke", "stroke_var", "outline", "small_text", "small_shapes")
+LAYOUT_LABELS = {"title_center": "Title alignment (0 centred, 1 at the edge)", "stroke": "Title stroke weight",
+                 "stroke_var": "Title stroke unevenness", "outline": "Title letter-outline complexity",
+                 "small_text": "Small text fragments", "small_shapes": "Small separate shapes"}
+
+
+def _title_boxes(b: np.ndarray) -> np.ndarray:
+    """The headline: the tallest text box plus any other line nearly as tall (a title set on two lines)."""
+    bh = b[:, 3] - b[:, 2]
+    return b[bh >= 0.7 * bh.max()]
+
+
+def _ink(patch: np.ndarray) -> np.ndarray | None:
+    """Letter pixels in a text box: the tone that differs from the box's border (the background)."""
+    g = cv2.cvtColor(patch, cv2.COLOR_RGB2GRAY)
+    if g.size < 60:
+        return None
+    _, bw = cv2.threshold(g, 0, 255, cv2.THRESH_BINARY | cv2.THRESH_OTSU)
+    border = np.concatenate([bw[0], bw[-1], bw[:, 0], bw[:, -1]])
+    ink = bw == 0 if border.mean() > 127 else bw == 255
+    return ink if 0.03 < ink.mean() < 0.85 else None
+
+
+def _type_metrics(rgb: np.ndarray, title: np.ndarray) -> dict:
+    """Stroke weight, stroke unevenness and outline complexity of the headline letters.
+
+    A heavy sans has thick, even strokes and simple outlines; serif, script and comic faces have thinner or more
+    uneven strokes and busier outlines. Measured with a distance transform on the letter pixels."""
+    widths, perim, area, heights = [], 0.0, 0.0, []
+    for x0, x1, y0, y1 in title.astype(int):
+        patch = rgb[max(0, y0):y1, max(0, x0):x1]
+        ink = _ink(patch) if patch.size else None
+        if ink is None:
+            continue
+        m = ink.astype(np.uint8)
+        dt = cv2.distanceTransform(m, cv2.DIST_L2, 3)
+        ridge = (dt >= cv2.dilate(dt, np.ones((3, 3), np.uint8))) & (m > 0) & (dt >= 1)
+        widths += list(2 * dt[ridge])
+        cs, _ = cv2.findContours(m, cv2.RETR_LIST, cv2.CHAIN_APPROX_NONE)
+        perim += sum(cv2.arcLength(c, True) for c in cs)
+        area += float(m.sum())
+        heights.append(max(1, y1 - y0))
+    if len(widths) < 10 or area < 30:
+        return {"stroke": None, "stroke_var": None, "outline": None}
+    w = np.array(widths)
+    h = float(np.median(heights))
+    return {"stroke": float(np.median(w) / h), "stroke_var": float(w.std() / max(w.mean(), 1e-6)),
+            "outline": float(perim / np.sqrt(area) / max(1, len(heights)))}
+
+
+def _small_shapes(rgb: np.ndarray, boxes: np.ndarray) -> int:
+    """Small separate shapes (stickers, dots, badges) away from text: blobs that stand out from their
+    surroundings, between ~0.03 % and 1 % of the image."""
+    small = cv2.resize(rgb, (270, max(1, int(270 * rgb.shape[0] / rgb.shape[1]))), interpolation=cv2.INTER_AREA)
+    lab = cv2.cvtColor(small, cv2.COLOR_RGB2LAB).astype(np.float32)
+    bg = cv2.medianBlur(small, 31)
+    diff = np.linalg.norm(lab - cv2.cvtColor(bg, cv2.COLOR_RGB2LAB).astype(np.float32), axis=2)
+    mask = (diff > 28).astype(np.uint8)
+    sx, sy = small.shape[1] / rgb.shape[1], small.shape[0] / rgb.shape[0]
+    for x0, x1, y0, y1 in boxes:                       # text is counted separately
+        mask[int(y0 * sy):int(np.ceil(y1 * sy)) + 1, int(x0 * sx):int(np.ceil(x1 * sx)) + 1] = 0
+    n, _, stats, _ = cv2.connectedComponentsWithStats(mask, connectivity=8)
+    total = mask.shape[0] * mask.shape[1]
+    return int(sum(1 for a in stats[1:, cv2.CC_STAT_AREA] if 0.0003 * total <= a <= 0.01 * total))
+
+
+def layout(img: Image.Image, typo: dict) -> dict:
+    """Layout, typeface and clutter measures for one image, using the text boxes in `typo`."""
+    im = img.convert("RGB")
+    h = max(1, int(round(WORK_W * im.height / im.width)))
+    rgb = np.asarray(im.resize((WORK_W, h)))
+    boxes = np.array([[b[0] * WORK_W, b[1] * WORK_W, b[2] * h, b[3] * h] for b in (typo.get("boxes") or [])], float)
+    out = {"lv": LAYOUT_VERSION, "title_center": None, "stroke": None, "stroke_var": None, "outline": None,
+           "small_text": 0.0, "small_shapes": float(min(_small_shapes(rgb, boxes.reshape(-1, 4)), 60)) / 60}
+    if len(boxes):
+        title = _title_boxes(boxes)
+        cx = ((title[:, 0] + title[:, 1]) / 2).mean() / WORK_W
+        out["title_center"] = float(min(1.0, abs(cx - 0.5) * 2))
+        out.update(_type_metrics(rgb, title))
+        th = (title[:, 3] - title[:, 2]).max()
+        out["small_text"] = float(min(int(((boxes[:, 3] - boxes[:, 2]) < 0.45 * th).sum()), 40)) / 40
+    return out
+
+
+def typography_full(img: Image.Image) -> dict:
+    """typography() plus layout(): everything stored per image."""
+    t = typography(img)
+    t.update(layout(img, t))
+    return t
+
+
 # ------------------------------------------------------------------ team habits + checks
 # Every check is calibrated on the team's own posted designs: a check that would flag many of the
 # team's approved posts is wrong for this team. (First version used fixed rules; on Techkriti's
@@ -140,7 +235,7 @@ def _headline_contrast(t: dict) -> float | None:
 
 def team_ranges(typos: list[dict]) -> dict:
     typos = [t for t in typos if t]
-    cols = {k: [t.get(k) for t in typos] for k in ("text_area", "n_lines", "headline", "aspect")}
+    cols = {k: [t.get(k) for t in typos] for k in ("text_area", "n_lines", "headline", "aspect") + LAYOUT_KEYS}
     cols["weak_share"] = [_weak_share(t) for t in typos]
     cols["headline_contrast"] = [_headline_contrast(t) for t in typos]
     out = {}
