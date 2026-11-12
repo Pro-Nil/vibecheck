@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react'
-import { ChevronRight, Download, FolderOpen, Images, RefreshCw, Upload } from 'lucide-react'
+import { ChevronRight, Download, FolderOpen, Images, RefreshCw, Trash2, Upload } from 'lucide-react'
 import { api, fmtDate, go } from '../api.js'
 import { Progress } from '../components/Charts.jsx'
 import { Mark, Notice, PinnedPost } from '../components/ui.jsx'
@@ -75,6 +75,42 @@ function Jobs({ teamId, bump, onDone }) {
         )
       })}
     </ul>
+  )
+}
+
+/** Delete the team and everything it owns, after typing its name. */
+function DeleteTeam({ team, counts, onDeleted }) {
+  const [open, setOpen] = useState(false)
+  const [typed, setTyped] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [err, setErr] = useState('')
+  useEffect(() => { setOpen(false); setTyped(''); setErr('') }, [team.id])
+  const total = (counts.team || 0) + (counts.other || 0) + (counts.rejected || 0)
+  const go = async () => {
+    setBusy(true); setErr('')
+    try { await api.deleteTeam(team.id); await onDeleted() } catch (e) { setErr(e.message); setBusy(false) }
+  }
+  return (
+    <section className="paper section-gap danger" aria-labelledby="del-h">
+      <h2 id="del-h">Delete this team</h2>
+      <p className="sub">Removes {team.name} and everything that belongs to it: {total} posts and their images, every check and
+        decision, and all trained models. This cannot be undone. Other teams are not affected.</p>
+      {!open ? (
+        <div className="field"><button type="button" className="danger-btn" onClick={() => setOpen(true)}><Trash2 className="i" aria-hidden="true" />Delete team…</button></div>
+      ) : (
+        <div className="body">
+          <label htmlFor="del-name">Type <strong>{team.name}</strong> to confirm</label>
+          <input id="del-name" value={typed} onChange={e => setTyped(e.target.value)} autoComplete="off" spellCheck="false" style={{ maxWidth: 420 }} />
+          {err && <div className="field"><Notice kind="error">{err}</Notice></div>}
+          <div className="row field">
+            <button type="button" className="danger-btn solid" disabled={typed.trim() !== team.name || busy} onClick={go}>
+              <Trash2 className="i" aria-hidden="true" />{busy ? 'Deleting…' : 'Delete permanently'}
+            </button>
+            <button type="button" onClick={() => { setOpen(false); setTyped('') }} disabled={busy}>Cancel</button>
+          </div>
+        </div>
+      )}
+    </section>
   )
 }
 
@@ -247,6 +283,8 @@ export default function SetupPage({ team, teamId, setTeamId, reloadTeams, firstR
         <summary><ChevronRight className="i" aria-hidden="true" />Add another team</summary>
         <div style={{ marginTop: 16 }}><NewTeamForm onCreated={async t => { await reloadTeams(); setTeamId(t.id) }} /></div>
       </details>
+
+      <DeleteTeam team={team} counts={c} onDeleted={async () => { await reloadTeams(); go('setup') }} />
     </div>
   )
 }

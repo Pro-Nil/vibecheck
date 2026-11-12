@@ -316,3 +316,29 @@ def test_upload_with_meta_csv_keeps_dates_likes_and_projects(client):
     bad = client.post(f"/teams/{tid}/import/upload", files=imgs[:1] + [("meta", ("m.csv", b"name,likes\nx,1\n", "text/csv"))],
                       data={"label": "team", "train": "false"})
     assert bad.status_code == 400
+
+
+def test_delete_team_removes_its_data_only(client, team):
+    from vibe import config
+    from vibe.db import Job, Post, SessionLocal
+    tid = client.post("/teams", json={"name": "To delete", "other_pages": []}).json()["id"]
+    imgs = [("files", (f"d{i}.png", png(team_style_image(i + 700)), "image/png")) for i in range(3)]
+    assert client.post(f"/teams/{tid}/import/upload", files=imgs, data={"label": "team", "train": "false"}).status_code == 201
+    folder = config.IMAGES_DIR / f"team_{tid}"
+    assert folder.exists()
+    with SessionLocal() as s:                      # a running job blocks the delete
+        s.add(Job(team_id=tid, kind="refresh", status="running"))
+        s.commit()
+        job_id = s.query(Job).filter_by(team_id=tid).one().id
+    assert client.delete(f"/teams/{tid}").status_code == 409
+    with SessionLocal() as s:
+        s.get(Job, job_id).status = "done"
+        s.commit()
+    r = client.delete(f"/teams/{tid}")
+    assert r.status_code == 200 and r.json()["posts"] == 3
+    assert client.get(f"/teams/{tid}").status_code == 404
+    assert not folder.exists()
+    with SessionLocal() as s:
+        assert s.query(Post).filter_by(team_id=tid).count() == 0
+    assert client.get(f"/teams/{team['id']}").status_code == 200          # other teams untouched
+    assert client.delete("/teams/99999").status_code == 404

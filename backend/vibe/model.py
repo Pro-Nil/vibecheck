@@ -693,6 +693,12 @@ def train(team_id: int) -> dict:
     return out
 
 
+def forget(team_id: int) -> None:
+    """Drop a team's cached model (after the team is deleted)."""
+    with _cache_lock:
+        _cache.pop(team_id, None)
+
+
 def latest(team_id: int) -> tuple[int, dict]:
     with SessionLocal() as s:
         mv = s.scalar(select(ModelVersion).where(ModelVersion.team_id == team_id)

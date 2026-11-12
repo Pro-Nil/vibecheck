@@ -25,6 +25,7 @@ export const api = {
   team: id => req('GET', `/teams/${id}`),
   createTeam: body => req('POST', '/teams', body),
   patchTeam: (id, body) => req('PATCH', `/teams/${id}`, body),
+  deleteTeam: id => req('DELETE', `/teams/${id}`),
   startImport: (id, body) => req('POST', `/teams/${id}/import`, body),
   uploadMany: (id, files, label, project = '', { meta = null, train = true } = {}) => {
     const f = new FormData()

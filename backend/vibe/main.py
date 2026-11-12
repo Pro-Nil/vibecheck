@@ -16,10 +16,10 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from PIL import Image
-from sqlalchemy import func, select
+from sqlalchemy import delete, func, select
 
 from . import config, features, importers, model, pipeline, plugins
-from .db import Check, Job, ModelVersion, Outcome, Plugin, Post, SessionLocal, Team, init_db
+from .db import Check, Feature, Job, ModelVersion, Outcome, Plugin, Post, SessionLocal, Team, init_db
 from .schemas import ImportIn, OutcomeIn, Panel, PluginIn, PluginPatch, PostPatch, TeamIn, TeamPatch
 
 MAX_UPLOAD_MB = 15
@@ -143,6 +143,47 @@ def patch_team(team_id: int, body: TeamPatch):
             t.other_pages_json = json.dumps([p.lstrip("@") for p in body.other_pages if p.strip()])
         s.commit()
         return t.to_dict()
+
+
+@app.delete("/teams/{team_id}", tags=["teams"], summary="Delete a team and everything it owns",
+            responses={409: {"description": "An import or training job for this team is still running"}})
+def delete_team(team_id: int):
+    """Removes the team's posts, features, checks and outcomes, model versions, jobs and team-only plugins, and its
+    files: images/team_<id>/, models/team_<id>_v*.joblib and the upload folders of its checks. Cannot be undone.
+    The Instagram download cache (raw/) is shared by page handle and is kept."""
+    import shutil
+    with SessionLocal() as s:
+        t = _team(s, team_id)
+        busy = s.scalar(select(Job.id).where(Job.team_id == team_id, Job.status.in_(("queued", "running"))))
+        if busy:
+            raise HTTPException(409, "An import or training job for this team is still running. Wait for it to finish, then delete.")
+        name = t.name
+        checks = list(s.scalars(select(Check).where(Check.team_id == team_id)))
+        upload_dirs = {Path(p).parent for c in checks for p in json.loads(c.inspo_json or "[]")}
+        post_ids = list(s.scalars(select(Post.id).where(Post.team_id == team_id)))
+        counts = {"posts": len(post_ids), "checks": len(checks)}
+        if post_ids:
+            s.execute(delete(Feature).where(Feature.post_id.in_(post_ids)))
+        if checks:
+            s.execute(delete(Outcome).where(Outcome.check_id.in_([c.id for c in checks])))
+        for table in (Check, Post, ModelVersion, Plugin, Job):
+            s.execute(delete(table).where(table.team_id == team_id))
+        s.delete(t)
+        s.commit()
+    model.forget(team_id)
+    data = config.DATA_DIR.resolve()
+
+    def rm(path: Path):  # only ever inside the data folder
+        p = path.resolve()
+        if p != data and data in p.parents and p.exists():
+            shutil.rmtree(p, ignore_errors=True) if p.is_dir() else p.unlink(missing_ok=True)
+    rm(config.IMAGES_DIR / f"team_{team_id}")
+    for f in config.MODELS_DIR.glob(f"team_{team_id}_v*.joblib"):
+        rm(f)
+    for d in upload_dirs:
+        if d.name.startswith("check_"):
+            rm(config.DATA_DIR / d)
+    return {"deleted": team_id, "name": name, **counts}
 
 
 # -------------------------------------------------------------------------- data

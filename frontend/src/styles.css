@@ -393,3 +393,10 @@ details[open] summary svg { transform: rotate(90deg); }
   .ref-rail { position: static; }
   .fix::after { left: 18px; right: 18px; }
 }
+
+/* destructive actions */
+.paper.danger { border-color: color-mix(in srgb, var(--bad) 30%, var(--rule)); }
+.danger-btn { color: var(--bad-ink); border-color: color-mix(in srgb, var(--bad) 45%, transparent); background: color-mix(in srgb, var(--bad) 8%, var(--paper-2)); }
+.danger-btn:hover:not(:disabled) { color: var(--bad-ink); border-color: var(--bad); }
+.danger-btn.solid { color: #fff; background: #c2410c; border-color: #c2410c; }
+.danger-btn.solid:hover:not(:disabled) { color: #fff; background: #9a3412; border-color: #9a3412; }
