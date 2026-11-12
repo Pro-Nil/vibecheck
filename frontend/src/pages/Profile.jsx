@@ -20,6 +20,31 @@ const TREND_KEYS = [
 ]
 const short = fmtShort
 
+/** Posts that land on (almost) the same spot are fanned out in a small sunflower spiral around that spot, so every
+ *  post stays visible and hoverable. Positions stay qualitative: close together still means similar. */
+function fanOut(points) {
+  if (!points.length) return points
+  const xs = points.map(d => d.x), ys = points.map(d => d.y)
+  const rx = Math.max(...xs) - Math.min(...xs) || 1, ry = Math.max(...ys) - Math.min(...ys) || 1
+  const cell = 0.035, cells = new Map()
+  points.forEach(d => {
+    const k = `${Math.round(d.x / rx / cell)},${Math.round(d.y / ry / cell)}`
+    if (!cells.has(k)) cells.set(k, [])
+    cells.get(k).push(d)
+  })
+  const out = []
+  // team posts at the centre of each spot, then rejected drafts, then other pages around them
+  const rank = { team: 0, rejected: 1, other: 2 }
+  cells.forEach(list => {
+    const cx = list.reduce((s, d) => s + d.x, 0) / list.length, cy = list.reduce((s, d) => s + d.y, 0) / list.length
+    list.sort((a, b) => rank[a.label] - rank[b.label]).forEach((d, i) => {
+      const r = 0.0105 * Math.sqrt(i), a = i * 2.39996
+      out.push({ ...d, x: list.length > 1 ? cx + r * rx * Math.cos(a) : d.x, y: list.length > 1 ? cy + r * ry * Math.sin(a) : d.y })
+    })
+  })
+  return out
+}
+
 function MapTip({ active, payload }) {
   const [post, setPost] = useState(null)
   const id = active && payload?.[0]?.payload?.post_id
@@ -44,8 +69,10 @@ export default function ProfilePage({ teamId, team }) {
     const ls = p.map.filter(d => d.label === 'team' && d.likes != null).map(d => d.likes)
     const lo = Math.min(...ls), hi = Math.max(...ls)
     const size = d => (d.likes == null || !ls.length || hi === lo ? 0.35 : (d.likes - lo) / (hi - lo))
-    return GROUPS.map(g => ({ ...g, data: p.map.filter(d => d.label === g.key).map(d => ({ ...d, size: g.key === 'team' ? size(d) : 0.3 })) }))
+    const spread = fanOut(p.map)
+    return GROUPS.map(g => ({ ...g, data: spread.filter(d => d.label === g.key).map(d => ({ ...d, size: g.key === 'team' ? size(d) : 0.3 })) }))
   }, [p])
+  const stacked = groups.length > 0 && p.map.length - new Set(p.map.map(d => `${Math.round(d.x * 4)},${Math.round(d.y * 4)}`)).size > p.map.length * 0.3
 
   if (err) return <Notice kind="error">{err} <a href="#/setup">Go to team setup.</a></Notice>
   if (!p) return <Loading>Loading the team's style…</Loading>
@@ -65,7 +92,7 @@ export default function ProfilePage({ teamId, team }) {
         <div className="split" style={{ gridTemplateColumns: 'minmax(0, 1.5fr) minmax(0, 1fr)', alignItems: 'start' }}>
           <div>
             <h2 id="map-h" style={{ color: '#fff' }}>Style map</h2>
-            <p className="muted" style={{ marginTop: 6 }}>Every post is a dot and similar-looking posts sit close together. A bigger team dot means more likes. Hover a dot to see the post.</p>
+            <p className="muted" style={{ marginTop: 6 }}>Every post is a dot and similar-looking posts sit close together. A bigger team dot means more likes. Hover a dot to see the post.{stacked && ' Posts that look almost the same are fanned out around their spot so each one shows.'}</p>
             <div className="legend" aria-hidden="true">
               <span><svg width="14" height="14"><circle cx="7" cy="7" r="6" fill={ON_BOARD.team} /></svg>This team</span>
               <span><svg width="14" height="14"><path d="M7 1.5L12.5 12H1.5Z" fill={ON_BOARD.other} /></svg>Other pages</span>
