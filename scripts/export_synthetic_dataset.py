@@ -12,6 +12,7 @@ images match the demo team. Layout:
     3_accepted_designs/  versions the simulated seniors accepted + meta.csv (project per file)  -> "Designs the seniors accepted"
     4_rejected_designs/  versions they rejected + meta.csv (project per file)                  -> "Rejected drafts"
     5_test_kit/          3 NEW briefs (3 versions each) for live checks; ANSWERS.md says what the seniors decided
+    6_idea_tests/        11 ideas for Check my idea (images + DESCRIPTION.txt); IDEAS.md has expected results
     README.md            step-by-step
 """
 from __future__ import annotations
@@ -97,6 +98,7 @@ not exist, with simulated likes and simulated seniors. Present it as synthetic.
 | `3_accepted_designs/` | Designs the seniors accepted | {n_acc} versions that were accepted; meta.csv gives each one's project |
 | `4_rejected_designs/` | Rejected drafts | {n_rej} versions that were rejected; meta.csv gives each one's project |
 | `5_test_kit/` | do not upload | 3 new briefs to check live; ANSWERS.md has the seniors' decisions |
+| `6_idea_tests/` | do not upload | 11 ideas for **Check my idea** (images + DESCRIPTION.txt); IDEAS.md has the expected results |
 
 The house style: navy or off-white background, coral and teal accents, a heavy left-aligned title, one big accent
 circle or stripe, lots of empty space. The simulated seniors reject (most to least strongly): colours outside the
@@ -117,12 +119,152 @@ a missing accent shape. Each decision has some noise and 10% of them are flipped
    text detection and the approval model).
 5. **Team style** shows what it learned; the approval model should switch itself on (it needs at least 8 accepted,
    8 rejected and 3 projects).
-6. Check the `5_test_kit` posters with **Check my design** and compare with `ANSWERS.md`. Mark the seniors' decision on
+6. Try `6_idea_tests` on **Check my idea** (see IDEAS.md), then check the `5_test_kit` posters with **Check my design** and compare with `ANSWERS.md`. Mark the seniors' decision on
    each result to see the adaptive loop.
 """
     (out / "README.md").write_text(readme, encoding="utf-8")
     print(f"wrote {out}: 90 team posts, 60 other-page posts, {n_acc} accepted, {n_rej} rejected, {len(answers)} test-kit posters")
 
 
+# ----------------------------------------------------------------------------- Check my idea tests
+def _sketch(spec: dict):
+    """A rough layout sketch: the poster's edges in pencil grey on white paper."""
+    from PIL import ImageFilter, ImageOps
+    g = M.render(spec).convert("L").filter(ImageFilter.FIND_EDGES)
+    g = ImageOps.invert(ImageOps.autocontrast(g))
+    return ImageOps.colorize(g.point(lambda v: 255 if v > 200 else v), black=(70, 70, 75), white=(250, 249, 246))
+
+
+def _moodboard(colours: list[tuple], rng):
+    """A colour moodboard: big swatches with a little texture, like a pinned palette."""
+    from PIL import Image, ImageDraw
+    im = Image.new("RGB", (M.W, M.H), (250, 249, 246))
+    d = ImageDraw.Draw(im)
+    pad, n = 36, len(colours)
+    h = (M.H - pad * (n + 1)) // n
+    for i, c in enumerate(colours):
+        y = pad + i * (h + pad)
+        d.rounded_rectangle([pad, y, M.W - pad, y + h], 18, fill=c)
+        for _ in range(40):
+            x0, y0 = int(rng.integers(pad, M.W - pad - 8)), int(rng.integers(y, y + h - 8))
+            t = tuple(int(min(255, max(0, v + rng.integers(-12, 12)))) for v in c)
+            d.ellipse([x0, y0, x0 + 6, y0 + 6], fill=t)
+    return im
+
+
+def _poster(rng, topic, breaks=(), **over):
+    s = M.random_spec(rng, topic, list(breaks))
+    s.update(over)
+    return M.render(s), s
+
+
+# Expected results follow the simulated seniors' rules (the same rules that decided the training data):
+# high = house style (navy/off-white, coral/teal, heavy left title, one accent shape, empty space);
+# low = what the seniors object to most (off palette, clutter, busy background, wrong typeface, centred).
+IDEAS = [
+    ("01_house_style_refs", "high",
+     "Navy background, big bold left-aligned title, one coral circle lower right, lots of empty space, date block bottom left.",
+     "two posters in the house style"),
+    ("02_house_palette_moodboard", "middle or low",
+     "Off-white background with navy text, coral and teal accents, heavy left-aligned title, a single diagonal teal stripe.",
+     "a moodboard of the team's own colours: right palette, but swatches do not look like a poster, so the look "
+     "match is weak (a known limit of judging ideas from images)"),
+    ("03_rough_layout_sketch", "middle",
+     "Navy background, heavy left-aligned title, coral circle bottom right, plenty of empty space.",
+     "a pencil-style layout sketch: right layout, but no colour, so it should land lower than 01"),
+    ("04_description_only_on_brand", "middle or high",
+     "Navy background, bold heavy left-aligned title, coral and teal circle accent, clean layout with lots of empty space.",
+     "no images, only an on-brand description"),
+    ("05_mixed_refs", "between 01 and 06",
+     "Mostly navy and coral like our posts, but borrowing a pastel purple accent from another club.",
+     "one house-style poster and one pastel poster from another club"),
+    ("06_pastel_centered_off", "low",
+     "Pastel pink background, purple script title centred, soft and dreamy, no accent shape.",
+     "two pastel posters with a centred script title"),
+    ("07_neon_busy_off", "low",
+     "Neon green on black, lots of stickers and badges, busy patterned background, centred title.",
+     "two cluttered neon posters with busy backgrounds"),
+    ("08_description_only_off_brand", "low",
+     "Hand-painted watercolour flowers, beige and brown, elegant serif title in the centre.",
+     "no images, only an off-brand description"),
+]
+KIT_PLANS = [  # plans for the test-kit briefs, to try the plan -> final link
+    ("09_plan_neural_nights", "NEURAL NIGHTS", "neural_nights"),
+    ("10_plan_build_week", "BUILD WEEK", "build_week"),
+    ("11_plan_tech_talk", "TECH TALK", "tech_talk"),
+]
+
+
+def write_idea_tests(out: Path, seed: int = 2026):
+    """6_idea_tests/: inputs for Check my idea, each with images (if any), DESCRIPTION.txt and an expected result."""
+    rng = __import__("numpy").random.default_rng(seed)        # separate seed: the other folders do not change
+    root = out / "6_idea_tests"
+    if root.exists():
+        shutil.rmtree(root)
+    root.mkdir(parents=True)
+    navy, offw, coral, teal = M.HOUSE_BG[0], M.HOUSE_BG[2], M.CORAL, M.TEAL
+    pastel, neon = M.OFF_PALETTES[0], M.OFF_PALETTES[1]
+    make = {
+        "01_house_style_refs": lambda: [_poster(rng, "GAME JAM", bg=navy, dark=True, text=(244, 239, 230), accent=coral,
+                                                 accent2=teal, accent_shape="circle")[0],
+                                         _poster(rng, "DATA DAY", bg=navy, dark=True, text=(244, 239, 230), accent=coral,
+                                                 accent2=teal, accent_shape="circle")[0]],
+        "02_house_palette_moodboard": lambda: [_moodboard([navy, offw, coral, teal], rng)],
+        "03_rough_layout_sketch": lambda: [_sketch(_poster(rng, "SPACE QUIZ", bg=navy, dark=True, text=(244, 239, 230),
+                                                           accent=coral, accent2=teal, accent_shape="circle")[1])],
+        "04_description_only_on_brand": lambda: [],
+        "05_mixed_refs": lambda: [_poster(rng, "OPEN MIC", bg=navy, dark=True, text=(244, 239, 230), accent=coral,
+                                          accent2=teal, accent_shape="circle")[0],
+                                  _poster(rng, "OPEN MIC", bg=pastel[0], dark=False, text=(30, 30, 30), accent=pastel[1],
+                                          accent2=pastel[2], title_font="script", align="center")[0]],
+        "06_pastel_centered_off": lambda: [_poster(rng, t, bg=pastel[0], dark=False, text=(90, 60, 140), accent=pastel[1],
+                                                   accent2=pastel[2], title_font="script", align="center",
+                                                   accent_shape=None)[0] for t in ("BAKE SALE", "POETRY SLAM")],
+        "07_neon_busy_off": lambda: [_poster(rng, t, bg=neon[0], dark=True, text=neon[1], accent=neon[1], accent2=neon[2],
+                                             busy_bg=True, clutter=22, align="center", title_font="comic")[0]
+                                     for t in ("RAVE NIGHT", "MEME WAR")],
+        "08_description_only_off_brand": lambda: [],
+    }
+    rows = []
+    for name, expect, desc, what in IDEAS:
+        d = root / name
+        d.mkdir()
+        imgs = make[name]()
+        for i, im in enumerate(imgs):
+            im.save(d / f"inspiration_{i + 1}.png")
+        (d / "DESCRIPTION.txt").write_text(desc + "\n", encoding="utf-8")
+        rows.append((name, len(imgs), expect, what, desc, ""))
+    for name, topic, project in KIT_PLANS:
+        d = root / name
+        d.mkdir()
+        for i in range(2):
+            _poster(rng, topic)[0].save(d / f"inspiration_{i + 1}.png")
+        desc = f"{topic.title()} poster in our usual style: heavy left-aligned title, coral or teal accent shape, lots of empty space."
+        (d / "DESCRIPTION.txt").write_text(desc + "\n", encoding="utf-8")
+        rows.append((name, 2, "high", f"a plan for the test-kit brief {project}", desc, project))
+    lines = ["# Check my idea: test inputs", "",
+             "Each folder is one idea: pin its images (if any) on **Check my idea** and paste DESCRIPTION.txt into",
+             "*Describe your plan*. Expected results follow the simulated seniors' rules; the exact numbers depend on",
+             "your trained model, so judge the **order** (high above middle above low), not a fixed score.", "",
+             "| Idea | Images | Expected | What it is |", "|---|---|---|---|"]
+    lines += [f"| `{n}` | {k} | **{e}** | {w} |" for n, k, e, w, _, _ in rows]
+    lines += ["", "## Plan to final", "",
+              "Folders 09 to 11 are plans for the three test-kit briefs. Check one as an idea with the brief name as the",
+              "project (e.g. `neural_nights`), then on the result click **Check my finished design** and pin the matching",
+              "`5_test_kit` posters. Each final shows *Plan vs final*, and the plan lists its finished designs.", "",
+              "## What to look at", "",
+              "- **Score and verdict**: on-brand ideas should score clearly above the off-brand ones.",
+              "- **Why**: the off-brand ideas should name the palette, clutter or busy background.",
+              "- **Closest team posts**: for on-brand ideas they should look like the house style.",
+              "- **Description-only ideas** (04, 08) show the description doing the work when there are no images."]
+    (root / "IDEAS.md").write_text("\n".join(lines) + "\n", encoding="utf-8")
+    print(f"wrote {root}: {len(rows)} ideas")
+    return rows
+
+
 if __name__ == "__main__":
-    main(Path(sys.argv[1]) if len(sys.argv) > 1 else ROOT / "synthetic_dataset")
+    args = [a for a in sys.argv[1:] if not a.startswith("--")]
+    target = Path(args[0]) if args else ROOT / "synthetic_dataset"
+    if "--ideas-only" not in sys.argv:
+        main(target)
+    write_idea_tests(target)
