@@ -73,8 +73,10 @@ export function PageHead({ title, meta, lead, actions }) {
 export function BrandMark() {
   return (
     <svg viewBox="0 0 32 32" aria-hidden="true">
-      <rect x="2.5" y="2.5" width="27" height="27" rx="6" fill="none" stroke="#fff" strokeWidth="2.6" transform="rotate(-8 16 16)" />
-      <path d="M9.5 16.5l4.5 4.5 8.5-10" stroke="#ffd166" strokeWidth="3.4" fill="none" strokeLinecap="round" strokeLinejoin="round" />
+      <defs><linearGradient id="bm" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stopColor="#f2493b" /><stop offset="1" stopColor="#c4261a" /></linearGradient></defs>
+      <rect x="1" y="1" width="30" height="30" rx="9" fill="url(#bm)" />
+      <rect x="1.5" y="1.5" width="29" height="29" rx="8.5" fill="none" stroke="rgba(255,255,255,.28)" />
+      <path d="M9.5 16.5l4.5 4.5 8.5-10" stroke="#fff" strokeWidth="3.2" fill="none" strokeLinecap="round" strokeLinejoin="round" />
     </svg>
   )
 }

@@ -91,17 +91,17 @@ function StyleScatter({ points, ranges }) {
           <ScatterChart margin={{ top: 8, right: 16, bottom: 30, left: 8 }}>
             <CartesianGrid stroke="rgba(255,255,255,.08)" />
             <XAxis type="number" dataKey="x" domain={dx} ticks={dx} tickFormatter={v => (v === dx[0] ? `← ${ENDS[X][0]}` : `${ENDS[X][1]} →`)}
-              tick={{ fill: '#bcd3c8', fontSize: 12 }} stroke="rgba(255,255,255,.25)"
+              tick={{ fill: '#a1a1aa', fontSize: 12 }} stroke="rgba(255,255,255,.25)"
               label={{ value: ranges[X].label, position: 'insideBottom', offset: -18, fill: '#fff', fontSize: 13, fontWeight: 700 }} />
             <YAxis type="number" dataKey="y" domain={dy} ticks={dy} tickFormatter={v => (v === dy[0] ? ENDS[Y][0] : ENDS[Y][1])}
-              tick={{ fill: '#bcd3c8', fontSize: 12 }} stroke="rgba(255,255,255,.25)" width={86}
+              tick={{ fill: '#a1a1aa', fontSize: 12 }} stroke="rgba(255,255,255,.25)" width={86}
               label={{ value: ranges[Y].label, angle: -90, position: 'insideLeft', offset: 10, fill: '#fff', fontSize: 13, fontWeight: 700 }} />
             <ZAxis type="number" dataKey="size" domain={[0, 1]} range={[22, 190]} />
             <ReferenceArea x1={Math.max(dx[0], rx.p10)} x2={Math.min(dx[1], rx.p90)} y1={Math.max(dy[0], ry.p10)} y2={Math.min(dy[1], ry.p90)} ifOverflow="hidden" fill="#fff" fillOpacity={0.07} stroke="#fff" strokeOpacity={0.55} strokeDasharray="5 4"
               label={{ value: "team's usual zone", position: 'insideTopLeft', fill: '#fff', fontSize: 11 }} />
             <Tooltip content={<MapTip />} cursor={false} />
             {groups.map(g => <Scatter key={g.key} name={g.name} data={g.data} fill={ON_BOARD[g.key]} shape={g.shape}
-              fillOpacity={g.key === 'team' ? 0.85 : 0.7} stroke={g.key === 'team' ? '#1f4a3d' : 'none'} strokeWidth={1} isAnimationActive={false} />)}
+              fillOpacity={g.key === 'team' ? 0.85 : 0.7} stroke={g.key === 'team' ? '#111113' : 'none'} strokeWidth={1} isAnimationActive={false} />)}
           </ScatterChart>
         </ResponsiveContainer>
       </div>
@@ -138,7 +138,7 @@ export default function ProfilePage({ teamId, team }) {
     <div>
       <div className="page-head">
         <div className="titles">
-          <h1>{team?.name}: learned style</h1>
+          <h1>{team?.name}: <em>learned style</em></h1>
           <p className="lead">What the model learned from {m.n_team} team posts{p.date_range ? ` (${fmtDate(p.date_range[0])} to ${fmtDate(p.date_range[1])})` : ''}, compared with {m.n_other} posts from other pages. Model v{p.model_version}, trained {fmtDate(p.trained_at)}.</p>
         </div>
       </div>

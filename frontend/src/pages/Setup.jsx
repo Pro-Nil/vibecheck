@@ -123,7 +123,7 @@ export default function SetupPage({ team, teamId, setTeamId, reloadTeams, firstR
     return (
       <div>
         <div className="page-head"><div className="titles">
-          <h1>Welcome to VibeCheck</h1>
+          <h1>Welcome to <em>VibeCheck</em></h1>
           <p className="lead">Add your design team, then import its posts (from Instagram or by uploading images) so the app can learn its style.</p>
         </div></div>
         <section className="paper" style={{ maxWidth: 760 }}>
@@ -137,7 +137,7 @@ export default function SetupPage({ team, teamId, setTeamId, reloadTeams, firstR
     <div>
       <div className="page-head">
         <div className="titles">
-          <h1>Team setup: {team.name}</h1>
+          <h1>Team setup: <em>{team.name}</em></h1>
           <p className="lead">The team's own posts teach the model what “our vibe” looks like; other pages' posts and real rejected drafts teach it what doesn't fit.</p>
         </div>
         <div className="actions"><button onClick={retrain}><RefreshCw className="i" aria-hidden="true" />Retrain now</button></div>

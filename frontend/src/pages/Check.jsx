@@ -80,7 +80,7 @@ export default function CheckPage({ team, teamId, mode = 'plan', planId = null }
     <form onSubmit={submit} noValidate>
       <div className="page-head">
         <div className="titles">
-          <h1>{t.title}</h1>
+          <h1>{t.title.split(' ').slice(0, -1).join(' ')} <em>{t.title.split(' ').pop()}</em></h1>
           {mode === 'plan'
             ? <p className="lead">Before you design, pin what you plan to make. You get a score for <strong>{team?.name}</strong>, the reasons in words, and the team's closest past posts. Finished already? <a href="#/final">Check your design instead.</a></p>
             : <p className="lead">Done designing? Pin the final poster to check it against <strong>{team?.name}</strong>'s style and get a finish checklist before the seniors see it.</p>}
