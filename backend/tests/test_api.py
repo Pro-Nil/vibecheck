@@ -342,3 +342,37 @@ def test_delete_team_removes_its_data_only(client, team):
         assert s.query(Post).filter_by(team_id=tid).count() == 0
     assert client.get(f"/teams/{team['id']}").status_code == 200          # other teams untouched
     assert client.delete("/teams/99999").status_code == 404
+
+
+def test_one_training_run_per_team(client, monkeypatch):
+    import threading
+    from vibe import pipeline
+    from vibe.db import Job, SessionLocal
+    gate = threading.Event()
+    runs = []
+
+    def slow_refresh(job_id, team_id, **kw):            # stands in for the real run, so the test controls timing
+        runs.append(job_id)
+        gate.wait(10)
+        with SessionLocal() as s:
+            j = s.get(Job, job_id)
+            j.status, j.progress, j.message = "done", 1.0, "ok"
+            s.commit()
+    monkeypatch.setattr(pipeline, "run_refresh", slow_refresh)
+    tid = client.post("/teams", json={"name": "Gate", "other_pages": []}).json()["id"]
+    a = client.post(f"/teams/{tid}/retrain").json()
+    b = client.post(f"/teams/{tid}/retrain").json()             # second click while the first runs
+    assert not a["joined"] and b["joined"] and b["job_id"] == a["job_id"] and not b["queued_follow_up"]
+    img = [("files", ("g.png", png(team_style_image(901)), "image/png"))]
+    u = client.post(f"/teams/{tid}/import/upload", files=img, data={"label": "team"}).json()
+    assert u["joined"] and u["queued_follow_up"]                  # new images: one follow-up run is queued
+    u2 = client.post(f"/teams/{tid}/import/upload", files=img, data={"label": "team"}).json()
+    assert u2["joined"]                                           # still only one follow-up
+    gate.set()
+    t0 = time.time()
+    while pipeline.active_job(tid) is not None and time.time() - t0 < 10:
+        time.sleep(0.05)
+    assert pipeline.active_job(tid) is None
+    assert len(runs) == 2                                         # the first run plus exactly one follow-up
+    with SessionLocal() as s:
+        assert {j.status for j in s.query(Job).filter_by(team_id=tid)} == {"done"}

@@ -5,7 +5,6 @@ from __future__ import annotations
 
 import io
 import json
-import threading
 import uuid
 from contextlib import asynccontextmanager
 from datetime import datetime, timedelta
@@ -31,8 +30,8 @@ def _daily_refresh():
         teams = [t.id for t in s.scalars(select(Team).where(Team.instagram_handle.is_not(None)))]
     for tid in teams:
         # only the team page's posts from the last week: never re-pulls old posts or other pages
-        pipeline.run_refresh(pipeline.new_job("daily-refresh", tid), tid, fetch=True, max_posts=50,
-                             max_posts_other=0, since=datetime.now() - timedelta(days=7))
+        pipeline.request_refresh(tid, "daily-refresh", background=False, fetch=True, max_posts=50,
+                                 max_posts_other=0, since=datetime.now() - timedelta(days=7))
 
 
 @asynccontextmanager
@@ -86,10 +85,6 @@ async def _read_image(f: UploadFile) -> tuple[bytes, Image.Image]:
     except Exception:
         raise HTTPException(400, f"{f.filename} is not an image we can read")
     return data, img
-
-
-def _start(job_id: int, target, *args, **kw):
-    threading.Thread(target=target, args=(job_id, *args), kwargs=kw, daemon=True).start()
 
 
 def _base_url(request: Request) -> str:
@@ -192,11 +187,10 @@ def delete_team(team_id: int):
 def start_import(team_id: int, body: ImportIn = Body(default_factory=ImportIn)):
     with SessionLocal() as s:
         _team(s, team_id)
-    job = pipeline.new_job("import", team_id)
-    _start(job, pipeline.run_refresh, team_id, fetch=body.fetch_instagram, max_posts=body.max_posts,
-           max_posts_other=body.max_posts_other,
-           since=datetime.combine(body.since, datetime.min.time()) if body.since else None, folders=[f.model_dump() for f in body.folders])
-    return {"job_id": job}
+    return pipeline.request_refresh(
+        team_id, "import", fetch=body.fetch_instagram, max_posts=body.max_posts, max_posts_other=body.max_posts_other,
+        since=datetime.combine(body.since, datetime.min.time()) if body.since else None,
+        folders=[f.model_dump() for f in body.folders])
 
 
 @app.post("/teams/{team_id}/import/upload", tags=["data"], status_code=201,
@@ -232,11 +226,10 @@ async def upload_many(team_id: int, files: list[UploadFile] = File(...),
                              decision="accepted" if label == "accepted" else None,
                              project=(row.get("project") or project).strip() or None)
         n += 1
-    job = None
-    if train:
-        job = pipeline.new_job("retrain", team_id)
-        _start(job, pipeline.run_refresh, team_id, fetch=False)
-    return {"added": n, "with_meta": with_meta, "job_id": job}
+    run = pipeline.request_refresh(team_id, "retrain", fetch=False) if train else {}
+    # joined: a run was already going; queued_follow_up: it runs once more afterwards so these images are included
+    return {"added": n, "with_meta": with_meta, "job_id": run.get("job_id"), "joined": run.get("joined", False),
+            "queued_follow_up": run.get("queued_follow_up", False)}
 
 
 @app.get("/jobs/{job_id}", tags=["data"])
@@ -322,9 +315,8 @@ async def image_features(file: UploadFile = File(...), include_vector: bool = Fa
 def retrain(team_id: int):
     with SessionLocal() as s:
         _team(s, team_id)
-    job = pipeline.new_job("retrain", team_id)
-    _start(job, pipeline.run_refresh, team_id, fetch=False)
-    return {"job_id": job}
+    # pressing Retrain while a run is going joins that run instead of starting a second one
+    return pipeline.request_refresh(team_id, "retrain", follow_up=False, fetch=False)
 
 
 @app.get("/teams/{team_id}/model", tags=["model"], summary="Current model, its accuracy, and history")

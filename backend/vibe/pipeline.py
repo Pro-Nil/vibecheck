@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import threading
 import traceback
 from typing import Callable
 
@@ -140,6 +141,60 @@ def make_near_misses(team_id: int, per_post: int = 1, progress: Progress | None 
 
 
 # ------------------------------------------------------------------------- jobs
+# --------------------------------------------------------------- one job per team at a time
+# Two refreshes of the same team at once would compute the same features twice and race on the model version.
+# So a team runs at most one import/training job; a request that arrives meanwhile joins it, and if it brings
+# something new (more images, an Instagram fetch) exactly one follow-up run is queued to start afterwards.
+_runner_lock = threading.Lock()
+_active: dict[int, int] = {}       # team id -> running job id
+_pending: dict[int, dict] = {}     # team id -> arguments of the single follow-up run
+
+
+def request_refresh(team_id: int, kind: str = "retrain", background: bool = True, follow_up: bool = True,
+                    **kw) -> dict:
+    """Start run_refresh for a team, or join the one already running.
+
+    Returns {"job_id", "joined", "queued_follow_up"}. follow_up=False (a plain "retrain" click) never queues an extra
+    run: joining the current run is enough because nothing new arrived.
+    """
+    with _runner_lock:
+        if team_id in _active:
+            queued = False
+            if follow_up:
+                prev = _pending.get(team_id, {})
+                # a pending Instagram fetch already ends with a retrain, so a plain retrain does not replace it
+                _pending[team_id] = prev if prev.get("fetch") and not kw.get("fetch") else {**kw, "kind": kind}
+                queued = True
+            return {"job_id": _active[team_id], "joined": True, "queued_follow_up": queued or team_id in _pending}
+        job = new_job(kind, team_id)
+        _active[team_id] = job
+    if background:
+        threading.Thread(target=_run_chain, args=(team_id, job, kw), daemon=True).start()
+    else:
+        _run_chain(team_id, job, kw)
+    return {"job_id": job, "joined": False, "queued_follow_up": False}
+
+
+def _run_chain(team_id: int, job: int, kw: dict):
+    while True:
+        try:
+            run_refresh(job, team_id, **kw)
+        finally:
+            with _runner_lock:
+                nxt = _pending.pop(team_id, None)
+                if nxt is None:
+                    _active.pop(team_id, None)
+                    return
+                kind = nxt.pop("kind", "retrain")
+                job, kw = new_job(kind, team_id), nxt
+                _active[team_id] = job
+
+
+def active_job(team_id: int) -> int | None:
+    with _runner_lock:
+        return _active.get(team_id)
+
+
 def new_job(kind: str, team_id: int | None) -> int:
     with SessionLocal() as s:
         j = Job(kind=kind, team_id=team_id, status="queued", message="Waiting to start")

@@ -37,7 +37,7 @@ function NewTeamForm({ onCreated }) {
 }
 
 const STATUS = { done: ['ok', 'finished'], error: ['bad', 'failed'], running: ['info', 'running'], queued: ['info', 'queued'] }
-function Jobs({ teamId, bump, onDone }) {
+function Jobs({ teamId, bump, onDone, onBusy }) {
   const [jobs, setJobs] = useState([])
   const timer = useRef()
   useEffect(() => {
@@ -50,6 +50,7 @@ function Jobs({ teamId, bump, onDone }) {
         return j
       })
       const busy = j.some(x => x.status === 'running' || x.status === 'queued')
+      onBusy?.(busy)
       timer.current = setTimeout(tick, busy ? 1500 : 8000)
     }
     tick()
@@ -125,6 +126,7 @@ export default function SetupPage({ team, teamId, setTeamId, reloadTeams, firstR
   const [project, setProject] = useState('')
   const [files, setFiles] = useState([])
   const [trainAfter, setTrainAfter] = useState(true)
+  const [training, setTraining] = useState(false)
   const [msg, setMsg] = useState('')
   const [err, setErr] = useState('')
   const [bump, setBump] = useState(0)
@@ -168,11 +170,17 @@ export default function SetupPage({ team, teamId, setTeamId, reloadTeams, firstR
     if (!images.length) throw new Error('Choose some images first. If you picked a folder, use “Choose a folder” instead.')
     const r = await api.uploadMany(teamId, images, label, project, { meta: metaFile, train: trainAfter })
     setMsg(`Uploaded ${r.added} images as “${label}”${metaFile ? ` (${r.with_meta} matched a row in ${metaFile.name})` : ''}. `
-      + (trainAfter ? 'Features and retraining are running.' : 'Not retrained yet: press Retrain now when everything is uploaded.'))
+      + (!trainAfter ? 'Not retrained yet: press Retrain now when everything is uploaded.'
+        : r.joined ? 'A training run was already going: it will run once more when it ends, so these images are included.'
+        : 'Features and retraining are running.'))
     setFiles([])
     setBump(b => b + 1)
   })
-  const retrain = () => act(async () => { await api.retrain(teamId); setBump(b => b + 1); setMsg('Retraining started.') })
+  const retrain = () => act(async () => {
+    const r = await api.retrain(teamId)
+    setBump(b => b + 1)
+    setMsg(r.joined ? 'A training run is already going, so no second one was started.' : 'Retraining started.')
+  })
 
   if (firstRun || !team) {
     return (
@@ -195,7 +203,7 @@ export default function SetupPage({ team, teamId, setTeamId, reloadTeams, firstR
           <h1>Team setup: <em>{team.name}</em></h1>
           <p className="lead">The team's own posts teach the model what “our vibe” looks like; other pages' posts and real rejected drafts teach it what doesn't fit.</p>
         </div>
-        <div className="actions"><button onClick={retrain}><RefreshCw className="i" aria-hidden="true" />Retrain now</button></div>
+        <div className="actions"><button onClick={retrain} disabled={training} title={training ? 'A training run is in progress' : undefined}><RefreshCw className={`i${training ? ' spin' : ''}`} aria-hidden="true" />{training ? 'Training…' : 'Retrain now'}</button></div>
       </div>
       {msg && <div style={{ marginBottom: 16 }}><Notice kind="ok">{msg}</Notice></div>}
       {err && <div style={{ marginBottom: 16 }}><Notice kind="error">{err}</Notice></div>}
@@ -276,7 +284,7 @@ export default function SetupPage({ team, teamId, setTeamId, reloadTeams, firstR
 
       <section className="paper section-gap" aria-labelledby="jobs-h">
         <h2 id="jobs-h">Imports and training</h2>
-        <Jobs teamId={teamId} bump={bump} onDone={() => { load(); reloadTeams() }} />
+        <Jobs teamId={teamId} bump={bump} onBusy={setTraining} onDone={() => { load(); reloadTeams() }} />
       </section>
 
       <details className="paper section-gap">
