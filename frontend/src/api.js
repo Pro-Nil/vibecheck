@@ -5,7 +5,10 @@ async function req(method, path, body, isForm = false) {
     if (isForm) opts.body = body
     else { opts.body = JSON.stringify(body); opts.headers['Content-Type'] = 'application/json' }
   }
-  const r = await fetch(path, opts)
+  let r
+  try { r = await fetch(path, opts) } catch {
+    throw new Error('Could not reach the VibeCheck server, or a selected file could not be read (a folder picked as a file?). Check the server is running and try again.')
+  }
   if (r.status === 204) return null
   const text = await r.text()
   let data

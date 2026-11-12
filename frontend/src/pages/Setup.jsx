@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react'
-import { ChevronRight, Download, RefreshCw, Upload } from 'lucide-react'
+import { ChevronRight, Download, FolderOpen, Images, RefreshCw, Upload } from 'lucide-react'
 import { api, fmtDate, go } from '../api.js'
 import { Progress } from '../components/Charts.jsx'
 import { Mark, Notice, PinnedPost } from '../components/ui.jsx'
@@ -93,6 +93,8 @@ export default function SetupPage({ team, teamId, setTeamId, reloadTeams, firstR
   const [err, setErr] = useState('')
   const [bump, setBump] = useState(0)
   const [preview, setPreview] = useState([])
+  const folderInput = useRef()
+  const filesInput = useRef()
 
   const load = async () => {
     if (!teamId) return
@@ -111,10 +113,23 @@ export default function SetupPage({ team, teamId, setTeamId, reloadTeams, firstR
     setMsg('Import started. Downloading can take several minutes per page.')
     setBump(b => b + 1)
   })
-  const images = files.filter(f => !/\.csv$/i.test(f.name))
+  const isImage = f => /\.(png|jpe?g|webp|gif|bmp)$/i.test(f.name) || f.type.startsWith('image/')
+  const images = files.filter(isImage)
   const metaFile = files.find(f => /\.csv$/i.test(f.name)) || null
+  const skipped = files.length - images.length - (metaFile ? 1 : 0)
+  // Pick files or a whole folder. A folder name tells us what the images are (e.g. 3_accepted_designs).
+  const choose = list => {
+    const all = [...list]
+    setFiles(all)
+    const dir = all[0]?.webkitRelativePath?.split('/')[0]?.toLowerCase() || ''
+    const guess = /reject/.test(dir) ? 'rejected' : /accept/.test(dir) ? 'accepted' : /other/.test(dir) ? 'other' : /team|post/.test(dir) ? 'team' : null
+    if (guess) setLabel(guess)
+    if (all.length && !all.some(isImage) && !all.some(f => /\.csv$/i.test(f.name)))
+      setErr('That looks like a folder, not images. Use “Choose a folder”, or open the folder and select the files inside it.')
+    else setErr('')
+  }
   const upload = () => act(async () => {
-    if (!images.length) throw new Error('Choose some images first.')
+    if (!images.length) throw new Error('Choose some images first. If you picked a folder, use “Choose a folder” instead.')
     const r = await api.uploadMany(teamId, images, label, project, { meta: metaFile, train: trainAfter })
     setMsg(`Uploaded ${r.added} images as “${label}”${metaFile ? ` (${r.with_meta} matched a row in ${metaFile.name})` : ''}. `
       + (trainAfter ? 'Features and retraining are running.' : 'Not retrained yet: press Retrain now when everything is uploaded.'))
@@ -201,11 +216,20 @@ export default function SetupPage({ team, teamId, setTeamId, reloadTeams, firstR
               </div>
             )}
             <div className="field">
-              <label htmlFor="files">Images <span className="hint">(and an optional meta.csv)</span></label>
-              <input id="files" type="file" accept="image/*,.csv" multiple onChange={e => setFiles([...e.target.files])} />
-              <p className="hint num" style={{ marginTop: 6 }}>
-                {files.length ? `${images.length} image${images.length === 1 ? '' : 's'} selected${metaFile ? ` + ${metaFile.name}` : ''}` : 'JPG, PNG or WebP.'}
-                {' '}A meta.csv (columns filename, posted_at, likes, caption, project) adds post dates, likes and per-image projects.
+              <span className="label-like">Images <span className="hint">(and an optional meta.csv)</span></span>
+              <div className="row">
+                <button type="button" onClick={() => folderInput.current.click()}><FolderOpen className="i" aria-hidden="true" />Choose a folder</button>
+                <button type="button" onClick={() => filesInput.current.click()}><Images className="i" aria-hidden="true" />Choose files</button>
+              </div>
+              <input ref={folderInput} type="file" hidden webkitdirectory="" directory="" multiple onChange={e => { choose(e.target.files); e.target.value = '' }} />
+              <input ref={filesInput} id="files" type="file" hidden accept="image/*,.csv" multiple onChange={e => { choose(e.target.files); e.target.value = '' }} />
+              <p className="hint num" style={{ marginTop: 8 }} aria-live="polite">
+                {files.length
+                  ? <><strong style={{ color: 'var(--ink)' }}>{images.length} image{images.length === 1 ? '' : 's'}</strong>
+                    {files[0]?.webkitRelativePath ? ` from ${files[0].webkitRelativePath.split('/')[0]}` : ''}{metaFile ? ` + ${metaFile.name}` : ''}
+                    {skipped > 0 ? ` (${skipped} other file${skipped === 1 ? '' : 's'} ignored)` : ''}. </>
+                  : 'JPG, PNG or WebP. '}
+                A meta.csv (columns filename, posted_at, likes, caption, project) adds post dates, likes and per-image projects.
               </p>
             </div>
             <div className="check-row"><input id="tra" type="checkbox" checked={trainAfter} onChange={e => setTrainAfter(e.target.checked)} /><label htmlFor="tra">Retrain after this upload <span className="hint">(untick while you upload several batches, then press Retrain now)</span></label></div>

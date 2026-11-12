@@ -162,7 +162,7 @@ input:hover, select:hover, textarea:hover { border-color: var(--ink-3); }
 input:focus-visible, select:focus-visible, textarea:focus-visible { outline: none; border-color: var(--accent); box-shadow: 0 0 0 4px color-mix(in srgb, var(--accent) 22%, transparent); }
 input::placeholder, textarea::placeholder { color: var(--ink-3); }
 textarea { min-height: 112px; resize: vertical; }
-label { font-weight: 600; display: block; margin-bottom: 8px; font-size: 0.93rem; }
+label, .label-like { font-weight: 600; display: block; margin-bottom: 8px; font-size: 0.93rem; }
 .field { margin-top: 18px; }
 .field:first-child { margin-top: 0; }
 .hint { color: var(--ink-3); font-size: 0.86rem; font-weight: 400; }
