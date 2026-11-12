@@ -75,8 +75,13 @@ def main(out: Path):
         lines = ["# Test kit: what the simulated seniors decided", "",
                  "Three new briefs the model never sees during setup. Check each version with **Check my design**",
                  "(use the brief name as the project), then compare the scores with the decisions below.", "",
-                 "| File | Seniors | What is wrong with it |", "|---|---|---|"]
-        lines += [f"| {a['file']} | {a['seniors']} | {', '.join(RULE_WORDS.get(x, x) for x in a['breaks']) or 'nothing'} |" for a in answers]
+                 "These decisions follow the seniors' rules exactly (no random flips). The training data is noisier on",
+                 "purpose: there, about 1 decision in 10 is flipped to imitate inconsistent people.", "",
+                 "Objection is how strongly the seniors dislike a version (sum of the rule weights it breaks, plus a",
+                 "little noise; below about 0.6 is fine). Within a brief the version with the lowest objection is accepted.", "",
+                 "| File | Seniors | Objection | What is wrong with it |", "|---|---|---|---|"]
+        lines += [f"| {a['file']} | {a['seniors']} | {a.get('penalty', '')} | "
+                  f"{', '.join(RULE_WORDS.get(x, x) for x in a['breaks']) or 'nothing'} |" for a in answers]
         (kit_dir / "ANSWERS.md").write_text("\n".join(lines) + "\n", encoding="utf-8")
 
     n_acc, n_rej = len(acc), len(rej)

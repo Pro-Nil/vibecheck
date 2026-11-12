@@ -187,8 +187,12 @@ def senior_penalty(breaks, rng) -> float:
     return sum(SENIOR_WEIGHTS[b] for b in breaks) + float(rng.normal(0, 0.35))
 
 
-def make_brief(rng, topic: str, n_versions: int = 3) -> list[dict]:
-    """Versions of one brief and the seniors' decision on each."""
+def make_brief(rng, topic: str, n_versions: int = 3, noisy: bool = True) -> list[dict]:
+    """Versions of one brief and the seniors' decision on each.
+
+    noisy=True flips 10 % of decisions at random (real seniors are inconsistent), which is right for TRAINING data.
+    The test kit uses noisy=False: an answer key must say what the seniors' rules decide. The random draw still
+    happens either way, so the generated images are identical."""
     versions = []
     for v in range(n_versions):
         k = int(rng.choice([0, 1, 1, 2, 2], 1)[0]) if v else int(rng.choice([0, 0, 1], 1)[0])
@@ -198,7 +202,7 @@ def make_brief(rng, topic: str, n_versions: int = 3) -> list[dict]:
     best = int(np.argmin(pen))
     for i, v in enumerate(versions):
         accepted = i == best or pen[i] < 0.6
-        if rng.random() < 0.10:              # inconsistent seniors
+        if rng.random() < 0.10 and noisy:    # inconsistent seniors (training data only)
             accepted = not accepted
         v["decision"] = "accepted" if accepted else "rejected"
         v["penalty"] = round(pen[i], 2)
@@ -245,11 +249,12 @@ def build(out_root: Path, seed: int = 7, n_history: int = 90, n_other: int = 60,
     # live-demo kit: 3 NEW briefs, not imported
     kit = []
     for b, topic in enumerate(["NEURAL NIGHTS", "BUILD WEEK", "TECH TALK"]):
-        vs = make_brief(rng, topic, n_versions=3)
+        vs = make_brief(rng, topic, n_versions=3, noisy=False)
         for j, v in enumerate(vs):
             fn = kit_dir / f"{topic.lower().replace(' ', '_')}_v{j + 1}.png"
             Image.Image.resize(render(v["spec"]), (1080, 1350), Image.LANCZOS).save(fn)
-            kit.append({"file": fn.name, "seniors": v["decision"], "breaks": v["breaks"]})
+            kit.append({"file": fn.name, "seniors": v["decision"], "breaks": [str(b) for b in v["breaks"]],
+                        "penalty": v["penalty"]})
     (kit_dir / "ANSWERS.json").write_text(json.dumps(kit, indent=1))
     return hist_dir, other_dir, briefs_dir, briefs, kit_dir
 
