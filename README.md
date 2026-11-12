@@ -87,6 +87,26 @@ score never trains on them. The first run of text detection downloads EasyOCR's 
 
 Example: `plugins/contrast_checker/app.py` (run on port 8100).
 
+### Plugin ideas
+
+**Suggested: Palette Fixer** (slot `result`). When a check is off-brand because of colour, suggest the closest
+on-brand swaps (e.g. "replace #8A2BE2 with team coral #FF6F61") and show the gain ("score 34 → 71 if you swap these
+2 colours").
+- Reads `plan_palette` and `reasons` from the `check.completed` event, fetches the team's signature palette and
+  re-scores through `api_base`, so it uses the API in both directions.
+- VibeCheck says *what* is wrong; this says *how to fix it*.
+- No ML needed: nearest colour in Lab space. Return a `Panel` with `metrics` (old/new score), `items` (the swaps)
+  and `chart`.
+
+**Alternatives**
+- **Posting-time advisor** (slot `profile`): from the team's posting history and likes, answer "post on Thursday
+  at 7 pm, your best slot", with a chart.
+- **Caption writer** (slot `result`): draft an Instagram caption and hashtags in the team's tone from the check's
+  description and reasons (needs an LLM API key).
+
+Current limits to know before building: the event carries features, not an image URL, so recolouring the actual
+poster isn't possible yet; plugin charts are drawn in one colour (see KNOWN_ISSUES.md).
+
 ## Evaluate the model on your data
 
 ```bash
