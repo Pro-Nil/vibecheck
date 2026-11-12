@@ -935,6 +935,11 @@ def style_profile(team_id: int) -> dict:
               "n": len(v)} for m, v in sorted(by_month.items())]
     eng = art.get("engagement")
     likes = {int(i): l for i, l in zip(d["id"], d["likes"])}
+    # every post's measured style (0-1 per feature), for the style scatter with readable axes
+    points = [{"post_id": int(i), "label": str(lab), "likes": lk,
+               **{k: round(float(v), 4) for k, v in zip(STYLE_KEYS, st)}}
+              for i, lab, lk, st in zip(d["id"], d["label"], d["likes"], d["style"])
+              if lab in ("team", "other", "rejected")]
     return {
         "model_version": mv_id, "trained_at": trained_at, "metrics": metrics,
         "thresholds": art["thresholds"], "ranges": art["ranges"],
@@ -944,5 +949,6 @@ def style_profile(team_id: int) -> dict:
         "map": [{"post_id": pid, "x": xy[0], "y": xy[1], "label": art["coord_labels"].get(pid, "other"),
                  "likes": likes.get(int(pid))}
                 for pid, xy in art["coords"].items()],
+        "points": points,
         "date_range": art.get("date_range"),
     }

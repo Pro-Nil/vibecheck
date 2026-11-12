@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react'
-import { Bar, BarChart, CartesianGrid, Cell, Legend, Line, LineChart, ReferenceLine, ResponsiveContainer,
+import { Bar, BarChart, CartesianGrid, Cell, Legend, Line, LineChart, ReferenceArea, ReferenceLine, ResponsiveContainer,
   Scatter, ScatterChart, Tooltip, XAxis, YAxis, ZAxis } from 'recharts'
 import { api, C, fmtDate, fmtShort, pct } from '../api.js'
 import { PluginPanel, Swatches } from '../components/Charts.jsx'
@@ -20,29 +20,93 @@ const TREND_KEYS = [
 ]
 const short = fmtShort
 
-/** Posts that land on (almost) the same spot are fanned out in a small sunflower spiral around that spot, so every
- *  post stays visible and hoverable. Positions stay qualitative: close together still means similar. */
-function fanOut(points) {
-  if (!points.length) return points
-  const xs = points.map(d => d.x), ys = points.map(d => d.y)
-  const rx = Math.max(...xs) - Math.min(...xs) || 1, ry = Math.max(...ys) - Math.min(...ys) || 1
-  const cell = 0.035, cells = new Map()
-  points.forEach(d => {
-    const k = `${Math.round(d.x / rx / cell)},${Math.round(d.y / ry / cell)}`
-    if (!cells.has(k)) cells.set(k, [])
-    cells.get(k).push(d)
-  })
-  const out = []
-  // team posts at the centre of each spot, then rejected drafts, then other pages around them
-  const rank = { team: 0, rejected: 1, other: 2 }
-  cells.forEach(list => {
-    const cx = list.reduce((s, d) => s + d.x, 0) / list.length, cy = list.reduce((s, d) => s + d.y, 0) / list.length
-    list.sort((a, b) => rank[a.label] - rank[b.label]).forEach((d, i) => {
-      const r = 0.0105 * Math.sqrt(i), a = i * 2.39996
-      out.push({ ...d, x: list.length > 1 ? cx + r * rx * Math.cos(a) : d.x, y: list.length > 1 ? cy + r * ry * Math.sin(a) : d.y })
-    })
-  })
-  return out
+// low and high ends of each style feature, in words (0 = left/bottom, 1 = right/top)
+const ENDS = {
+  brightness: ['darker', 'brighter'], saturation: ['muted', 'saturated'], warmth: ['cooler', 'warmer'],
+  text_amount: ['little text', 'text-heavy'], busyness: ['plain', 'busy'], whitespace: ['filled', 'empty space'],
+  contrast: ['flat', 'high contrast'], illustration: ['photographic', 'illustrated'],
+}
+const median = a => { const s = [...a].sort((x, y) => x - y); return s.length ? s[Math.floor(s.length / 2)] : 0.5 }
+const iqr = a => { const s = [...a].sort((x, y) => x - y); return s.length > 3 ? s[Math.floor(s.length * 0.75)] - s[Math.floor(s.length * 0.25)] : 0.2 }
+
+/** How far apart the team's posts and the comparison posts are on one feature, in spread units. */
+function separation(points, k) {
+  const t = points.filter(d => d.label === 'team').map(d => d[k])
+  let o = points.filter(d => d.label === 'other').map(d => d[k])
+  if (o.length < 5) o = points.filter(d => d.label === 'rejected').map(d => d[k])
+  if (t.length < 3 || o.length < 3) return 0
+  return Math.abs(median(t) - median(o)) / Math.max(0.03, (iqr(t) + iqr(o)) / 2)
+}
+
+/** Every post plotted on two named style features; the team's usual zone drawn as a box. */
+function StyleScatter({ points, ranges }) {
+  const keys = Object.keys(ranges).filter(k => ENDS[k] && points.some(d => d[k] != null))
+  const ranked = useMemo(() => [...keys].sort((a, b) => separation(points, b) - separation(points, a)), [points])
+  const [xk, setX] = useState(null)
+  const [yk, setY] = useState(null)
+  const X = xk || ranked[0], Y = yk || (ranked[1] === X ? ranked[0] : ranked[1])
+  const groups = useMemo(() => {
+    const ls = points.filter(d => d.label === 'team' && d.likes != null).map(d => d.likes)
+    const lo = Math.min(...ls), hi = Math.max(...ls)
+    const size = d => (d.likes == null || !ls.length || hi === lo ? 0.35 : (d.likes - lo) / (hi - lo))
+    return GROUPS.map(g => ({ ...g, data: points.filter(d => d.label === g.key).map(d => ({ ...d, x: d[X], y: d[Y], size: g.key === 'team' ? size(d) : 0.3 })) }))
+  }, [points, X, Y])
+  if (!X || !Y || !points.length) return <p className="muted">Not enough posts to plot yet.</p>
+
+  const team = points.filter(d => d.label === 'team'), other = points.filter(d => d.label === 'other')
+  const word = (k, a, b) => (Math.abs(a - b) < 0.04 ? null : ENDS[k][a > b ? 1 : 0])
+  const tx = median(team.map(d => d[X])), ty = median(team.map(d => d[Y]))
+  const diffs = other.length >= 5 ? [word(X, tx, median(other.map(d => d[X]))), word(Y, ty, median(other.map(d => d[Y])))].filter(Boolean) : []
+  const rx = ranges[X], ry = ranges[Y]
+  // zoom each axis to where the posts actually are (with a margin), so a narrow range does not squash them
+  const dom = k => {
+    const v = points.map(d => d[k]).filter(x => x != null)
+    const lo = Math.min(...v), hi = Math.max(...v), pad = Math.max(0.02, (hi - lo) * 0.08)
+    return [Math.max(0, +(lo - pad).toFixed(3)), Math.min(1, +(hi + pad).toFixed(3))]
+  }
+  const dx = dom(X), dy = dom(Y)
+  const select = (id, v, set, not) => (
+    <select id={id} value={v} onChange={e => set(e.target.value)}>
+      {keys.filter(k => k !== not).map(k => <option key={k} value={k}>{ranges[k].label}</option>)}
+    </select>
+  )
+  return (
+    <div>
+      <h2 id="map-h" style={{ color: '#fff' }}>Where the team's posts sit</h2>
+      <p className="muted" style={{ marginTop: 6 }}>
+        Every post plotted by two measured style features. The box is the team's usual zone (middle 80% of its posts).
+        {diffs.length > 0 && <> Compared with other pages, this team's posts are <strong style={{ color: '#fff' }}>{diffs.join(' and ')}</strong>.</>}
+      </p>
+      <div className="axis-pick">
+        <label htmlFor="ax-x">Across</label>{select('ax-x', X, setX, Y)}
+        <label htmlFor="ax-y">Up</label>{select('ax-y', Y, setY, X)}
+      </div>
+      <div className="legend" aria-hidden="true">
+        <span><svg width="14" height="14"><circle cx="7" cy="7" r="6" fill={ON_BOARD.team} /></svg>This team (bigger = more likes)</span>
+        <span><svg width="14" height="14"><path d="M7 1.5L12.5 12H1.5Z" fill={ON_BOARD.other} /></svg>Other pages</span>
+        <span><svg width="14" height="14"><path d="M2.5 2.5L11.5 11.5M11.5 2.5L2.5 11.5" stroke={ON_BOARD.rejected} strokeWidth="3" /></svg>Rejected drafts</span>
+      </div>
+      <div role="img" aria-label={`Scatter of ${points.length} posts by ${ranges[X].label} and ${ranges[Y].label}.${diffs.length ? ` This team's posts are ${diffs.join(' and ')} than other pages.` : ''}`} style={{ marginTop: 8 }}>
+        <ResponsiveContainer width="100%" height={400}>
+          <ScatterChart margin={{ top: 8, right: 16, bottom: 30, left: 8 }}>
+            <CartesianGrid stroke="rgba(255,255,255,.08)" />
+            <XAxis type="number" dataKey="x" domain={dx} ticks={dx} tickFormatter={v => (v === dx[0] ? `← ${ENDS[X][0]}` : `${ENDS[X][1]} →`)}
+              tick={{ fill: '#bcd3c8', fontSize: 12 }} stroke="rgba(255,255,255,.25)"
+              label={{ value: ranges[X].label, position: 'insideBottom', offset: -18, fill: '#fff', fontSize: 13, fontWeight: 700 }} />
+            <YAxis type="number" dataKey="y" domain={dy} ticks={dy} tickFormatter={v => (v === dy[0] ? ENDS[Y][0] : ENDS[Y][1])}
+              tick={{ fill: '#bcd3c8', fontSize: 12 }} stroke="rgba(255,255,255,.25)" width={86}
+              label={{ value: ranges[Y].label, angle: -90, position: 'insideLeft', offset: 10, fill: '#fff', fontSize: 13, fontWeight: 700 }} />
+            <ZAxis type="number" dataKey="size" domain={[0, 1]} range={[22, 190]} />
+            <ReferenceArea x1={Math.max(dx[0], rx.p10)} x2={Math.min(dx[1], rx.p90)} y1={Math.max(dy[0], ry.p10)} y2={Math.min(dy[1], ry.p90)} ifOverflow="hidden" fill="#fff" fillOpacity={0.07} stroke="#fff" strokeOpacity={0.55} strokeDasharray="5 4"
+              label={{ value: "team's usual zone", position: 'insideTopLeft', fill: '#fff', fontSize: 11 }} />
+            <Tooltip content={<MapTip />} cursor={false} />
+            {groups.map(g => <Scatter key={g.key} name={g.name} data={g.data} fill={ON_BOARD[g.key]} shape={g.shape}
+              fillOpacity={g.key === 'team' ? 0.85 : 0.7} stroke={g.key === 'team' ? '#1f4a3d' : 'none'} strokeWidth={1} isAnimationActive={false} />)}
+          </ScatterChart>
+        </ResponsiveContainer>
+      </div>
+    </div>
+  )
 }
 
 function MapTip({ active, payload }) {
@@ -64,15 +128,6 @@ export default function ProfilePage({ teamId, team }) {
   const [p, setP] = useState(null)
   const [err, setErr] = useState('')
   useEffect(() => { setP(null); setErr(''); if (teamId) api.profile(teamId).then(setP).catch(e => setErr(e.message)) }, [teamId])
-  const groups = useMemo(() => {
-    if (!p) return []
-    const ls = p.map.filter(d => d.label === 'team' && d.likes != null).map(d => d.likes)
-    const lo = Math.min(...ls), hi = Math.max(...ls)
-    const size = d => (d.likes == null || !ls.length || hi === lo ? 0.35 : (d.likes - lo) / (hi - lo))
-    const spread = fanOut(p.map)
-    return GROUPS.map(g => ({ ...g, data: spread.filter(d => d.label === g.key).map(d => ({ ...d, size: g.key === 'team' ? size(d) : 0.3 })) }))
-  }, [p])
-  const stacked = groups.length > 0 && p.map.length - new Set(p.map.map(d => `${Math.round(d.x * 4)},${Math.round(d.y * 4)}`)).size > p.map.length * 0.3
 
   if (err) return <Notice kind="error">{err} <a href="#/setup">Go to team setup.</a></Notice>
   if (!p) return <Loading>Loading the team's style…</Loading>
@@ -90,27 +145,7 @@ export default function ProfilePage({ teamId, team }) {
 
       <section className="board" aria-labelledby="map-h">
         <div className="split" style={{ gridTemplateColumns: 'minmax(0, 1.5fr) minmax(0, 1fr)', alignItems: 'start' }}>
-          <div>
-            <h2 id="map-h" style={{ color: '#fff' }}>Style map</h2>
-            <p className="muted" style={{ marginTop: 6 }}>Every post is a dot and similar-looking posts sit close together. A bigger team dot means more likes. Hover a dot to see the post.{stacked && ' Posts that look almost the same are fanned out around their spot so each one shows.'}</p>
-            <div className="legend" aria-hidden="true">
-              <span><svg width="14" height="14"><circle cx="7" cy="7" r="6" fill={ON_BOARD.team} /></svg>This team</span>
-              <span><svg width="14" height="14"><path d="M7 1.5L12.5 12H1.5Z" fill={ON_BOARD.other} /></svg>Other pages</span>
-              <span><svg width="14" height="14"><path d="M2.5 2.5L11.5 11.5M11.5 2.5L2.5 11.5" stroke={ON_BOARD.rejected} strokeWidth="3" /></svg>Rejected drafts</span>
-            </div>
-            <div role="img" aria-label={`Map of ${p.map.length} posts. This team's posts form their own cluster apart from other pages.`} style={{ marginTop: 6 }}>
-              <ResponsiveContainer width="100%" height={380}>
-                <ScatterChart margin={{ top: 10, right: 10, bottom: 10, left: 10 }}>
-                  <XAxis type="number" dataKey="x" hide domain={['dataMin - 0.5', 'dataMax + 0.5']} />
-                  <YAxis type="number" dataKey="y" hide domain={['dataMin - 0.5', 'dataMax + 0.5']} />
-                  <ZAxis type="number" dataKey="size" domain={[0, 1]} range={[16, 170]} />
-                  <Tooltip content={<MapTip />} cursor={false} />
-                  {groups.map(g => <Scatter key={g.key} name={g.name} data={g.data} fill={ON_BOARD[g.key]} shape={g.shape}
-                    fillOpacity={g.key === 'team' ? 0.9 : 0.75} stroke={g.key === 'team' ? '#1f4a3d' : 'none'} strokeWidth={1.2} isAnimationActive={false} />)}
-                </ScatterChart>
-              </ResponsiveContainer>
-            </div>
-          </div>
+          <StyleScatter points={p.points || []} ranges={p.ranges} />
           <div>
             <h2 style={{ color: '#fff' }}>Signature palette</h2>
             <p className="muted" style={{ marginTop: 6, marginBottom: 14 }}>The colours this team uses most, by area.</p>

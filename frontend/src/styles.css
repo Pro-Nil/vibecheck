@@ -436,3 +436,8 @@ input:focus-visible, select:focus-visible, textarea:focus-visible { outline: non
   .readout .score-n { font-size: 7.5rem; }
   .ref-rail { position: static; }
 }
+
+/* axis pickers for the style scatter (on felt) */
+.axis-pick { display: flex; flex-wrap: wrap; gap: 8px 10px; align-items: center; margin-top: 14px; }
+.axis-pick label { margin: 0; color: var(--on-felt-2); font-weight: 700; font-size: 0.85rem; }
+.axis-pick select { width: auto; background: var(--felt); color: var(--on-felt); border-color: rgba(255, 255, 255, 0.2); padding: 7px 10px; font-weight: 700; font-size: 0.9rem; }
