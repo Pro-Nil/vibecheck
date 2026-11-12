@@ -22,8 +22,15 @@ export default function HistoryPage({ teamId, team }) {
           <h1>History</h1>
           <p className="lead">Every check for {team?.name}. Record what the seniors decided: those decisions are how the approval model learns. Nothing is deleted; decided work keeps its stamp.</p>
         </div>
-        {rows?.length > 0 && <p className="muted num">{rows.length} checks · {decided} decided</p>}
       </div>
+      {rows?.length > 0 && (
+        <div className="summary-row" aria-label="Summary">
+          <div><b>{rows.length}</b><span>checks</span></div>
+          <div><b>{rows.filter(r => r.verdict_level === 'approve').length}</b><span>scored on-brand</span></div>
+          <div><b>{decided}</b><span>decided by seniors</span></div>
+          <div><b>{rows.filter(r => r.outcome === 'approved' || r.outcome === 'posted').length}</b><span>approved or posted</span></div>
+        </div>
+      )}
       {err && <Notice kind="error">{err}</Notice>}
       {!rows && !err && <Loading />}
       {rows && !rows.length && (

@@ -1,7 +1,8 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react'
-import { ImagePlus, LoaderCircle, Pin, X } from 'lucide-react'
+import { ImagePlus, LoaderCircle, Pin, Stamp, X } from 'lucide-react'
 import { api, go } from '../api.js'
-import { Notice } from '../components/ui.jsx'
+import { Swatches } from '../components/Charts.jsx'
+import { Notice, PinnedPost } from '../components/ui.jsx'
 
 const DRAFT_KEY = 'vibe.draft'
 function loadDraft() { try { return JSON.parse(sessionStorage.getItem(DRAFT_KEY)) || {} } catch { return {} } }
@@ -31,7 +32,15 @@ export default function CheckPage({ team, teamId, mode = 'plan', planId = null }
   const [busy, setBusy] = useState(false)
   const [err, setErr] = useState('')
   const input = useRef()
+  const [ref, setRef] = useState({ posts: [], palette: [] })
 
+  useEffect(() => {
+    if (!teamId || (team && !team.trained)) return
+    let alive = true
+    api.posts(teamId, 'team', 4).then(p => alive && setRef(r => ({ ...r, posts: p.items || [] }))).catch(() => {})
+    api.profile(teamId).then(p => alive && setRef(r => ({ ...r, palette: (p.signature_palette || []).slice(0, 6) }))).catch(() => {})
+    return () => { alive = false }
+  }, [teamId, team?.trained])
   useEffect(() => { setFiles([]); setErr(''); setPlan(planId || '') }, [mode, planId])
   useEffect(() => {
     if (mode !== 'final' || !teamId) return
@@ -78,10 +87,11 @@ export default function CheckPage({ team, teamId, mode = 'plan', planId = null }
         </div>
       </div>
 
+      <div className="check-layout">
+      <div>
       <section aria-labelledby="inspo-h">
-        <div className="row" style={{ justifyContent: 'space-between', marginBottom: 10 }}>
+        <div className="row" style={{ justifyContent: 'space-between', marginBottom: 12 }}>
           <h2 id="inspo-h">{t.imgH} <span className="hint num">{files.length}/{t.max}</span></h2>
-          <span className="hint">{t.imgSub}</span>
         </div>
         <div className={`board dropboard${over ? ' over' : ''}`}
           onDragOver={e => { e.preventDefault(); setOver(true) }} onDragLeave={() => setOver(false)}
@@ -90,7 +100,12 @@ export default function CheckPage({ team, teamId, mode = 'plan', planId = null }
             <button type="button" className="hint-big" onClick={pick} style={{ width: '100%', background: 'transparent', font: 'inherit' }} aria-label={t.drop}>
               <Pin aria-hidden="true" />
               <strong>{t.max === 1 ? 'Pin your design here' : 'Pin your inspiration here'}</strong>
-              <span>Drop {t.max === 1 ? 'the image' : 'images'} or click to choose {t.max === 1 ? '' : `(up to ${t.max})`}</span>
+              <span>{t.imgSub}</span>
+              <span className="steps" aria-hidden="true">
+                <span><b>1</b>Drop {t.max === 1 ? 'the image' : `up to ${t.max} images`} or click</span>
+                <span><b>2</b>{mode === 'plan' ? 'Describe the plan' : 'Link your plan (optional)'}</span>
+                <span><b>3</b>Get the verdict</span>
+              </span>
             </button>
           ) : (
             <div className="pins">
@@ -145,9 +160,25 @@ export default function CheckPage({ team, teamId, mode = 'plan', planId = null }
       </section>
 
       {err && <div className="section-gap"><Notice kind="error">{err}</Notice></div>}
-      <div className="row section-gap">
-        <button className="primary" type="submit" disabled={busy}>{busy && <LoaderCircle className="i spin" aria-hidden="true" />}{busy ? 'Checking…' : t.button}</button>
-        {busy && <span className="muted small" role="status">{mode === 'final' ? 'Reading your design and its text (up to ~10 seconds)…' : 'Reading your images (a few seconds)…'}</span>}
+      <div className="submit-bar">
+        <button className="primary big" type="submit" disabled={busy}>{busy ? <LoaderCircle className="i spin" aria-hidden="true" /> : <Stamp className="i" aria-hidden="true" />}{busy ? 'Checking…' : t.button}</button>
+        {busy
+          ? <span className="muted small" role="status">{mode === 'final' ? 'Reading your design and its text (up to ~10 seconds)…' : 'Reading your images (a few seconds)…'}</span>
+          : <span className="muted small">{mode === 'final' ? 'Takes about ten seconds.' : 'Takes a few seconds.'}</span>}
+      </div>
+      </div>
+
+      <aside className="ref-rail paper" aria-labelledby="ref-h">
+        <h2 id="ref-h" style={{ fontSize: '1.3rem' }}>{team?.name?.replace(/\s*\(synthetic\)$/, '')} at a glance</h2>
+        <p className="sub">What “on-brand” means here: the latest posts and the signature palette.</p>
+        {ref.palette.length > 0 && <Swatches colors={ref.palette} label="Team signature palette" />}
+        {ref.posts.length > 0 && (
+          <div className="posts">
+            {ref.posts.map((p, i) => <PinnedPost key={p.id} post={p} i={i} />)}
+          </div>
+        )}
+        <p className="sub" style={{ marginTop: 18 }}><a href="#/profile">See the full team style</a></p>
+      </aside>
       </div>
     </form>
   )

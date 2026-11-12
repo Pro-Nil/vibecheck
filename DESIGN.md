@@ -46,6 +46,17 @@ or neutral grey (the team's).
 - **Ledger**: number + explanation rows for model statistics (instead of same-size stat tiles).
 - **Paint chips** for palettes: swatch, hex in monospace, share of area.
 - **Seg** control for the seniors' decision; the pressed option takes stamp violet.
+- **Materials**: felt surfaces (top bar, boards) carry a soft-light noise grain; boards have a dark inset frame with a
+  lit rim; the top bar has a dashed stitch line. Paper cards have a 1px top highlight and a layered shadow. Pins are
+  domed with a highlight.
+- **Readout** (Result): score numeral, verdict and one-line summary on the left; the **threshold scale** (0–100 rule
+  with off-brand / borderline / on-brand zones, the score as a marker, cut-offs in a caption) and **score parts** with
+  hairline bars on the right. Closest posts run as a strip along the bottom of the board.
+- **Feedback sheet**: "What to change" and the finish checklist come first, with a coloured top edge (vermillion when
+  something is off, green when clear) and tinted rows; passed checks collapse to chips; "What already fits" is a
+  compact multi-column list.
+- **Meta chips** under page titles (project, author, date, model version).
+- **Check page**: work area plus a sticky reference rail (team palette and latest posts); sticky submit bar.
 
 ## Motion
 
