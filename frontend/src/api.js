@@ -63,15 +63,12 @@ export const api = {
 }
 
 // Okabe–Ito colour-blind-safe palette. Meaning is never carried by colour alone.
+// Verdict colours (approve/borderline/reject) are reserved for verdicts and check states.
 export const C = {
-  team: '#0072B2', other: '#E69F00', rejected: '#D55E00', plan: '#009E73',
-  approve: '#009E73', borderline: '#B8860B', reject: '#D55E00', grey: '#8a8f98',
-}
-export const LEVEL = {
-  approve: { color: C.approve, icon: '✓' },
-  borderline: { color: C.borderline, icon: '~' },
-  reject: { color: C.reject, icon: '✗' },
+  team: '#0072B2', other: '#CC79A7', rejected: '#D55E00', plan: '#009E73', ink2: '#7b8a83',
+  approve: '#009E73', borderline: '#E69F00', reject: '#D55E00', grey: '#8a8f98', stamp: '#5B3E96',
 }
 export const go = path => { window.location.hash = '#/' + path }
 export const pct = v => Math.round(v * 100)
+export const fmtShort = s => (s ? new Date(s).toLocaleDateString(undefined, { day: 'numeric', month: 'short' }) : '—')
 export const fmtDate = s => (s ? new Date(s).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' }) : '—')

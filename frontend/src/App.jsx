@@ -6,14 +6,16 @@ import ResultPage from './pages/Result.jsx'
 import HistoryPage from './pages/History.jsx'
 import ProfilePage from './pages/Profile.jsx'
 import PluginsPage from './pages/Plugins.jsx'
+import { BrandMark } from './components/ui.jsx'
+import { Blocks, History, Lightbulb, Moon, Palette, Settings2, Stamp, Sun } from 'lucide-react'
 
 const NAV = [
-  ['check', 'Check my idea'],
-  ['final', 'Check my design'],
-  ['history', 'History'],
-  ['profile', 'Team style'],
-  ['setup', 'Team setup'],
-  ['plugins', 'Plugins'],
+  ['check', 'Check my idea', Lightbulb],
+  ['final', 'Check my design', Stamp],
+  ['history', 'History', History],
+  ['profile', 'Team style', Palette],
+  ['setup', 'Team setup', Settings2],
+  ['plugins', 'Plugins', Blocks],
 ]
 
 function useHashRoute() {
@@ -69,12 +71,12 @@ export default function App() {
       <header className="top">
         <div className="top-inner">
           <a className="brand" href="#/check" aria-label="VibeCheck home">
-            <svg viewBox="0 0 32 32" aria-hidden="true"><rect width="32" height="32" rx="8" fill="#0072B2" /><path d="M8 17l5 5 11-12" stroke="#fff" strokeWidth="3.5" fill="none" strokeLinecap="round" strokeLinejoin="round" /></svg>
-            VibeCheck
+            <BrandMark />
+            VIBECHECK
           </a>
           <nav className="tabs" aria-label="Main">
-            {NAV.map(([k, label]) => (
-              <a key={k} href={`#/${k}`} aria-current={page === k || (page === 'result' && k === 'check') ? 'page' : undefined}>{label}</a>
+            {NAV.map(([k, label, I]) => (
+              <a key={k} href={`#/${k}`} aria-current={page === k ? 'page' : undefined}><I aria-hidden="true" />{label}</a>
             ))}
           </nav>
           <div className="top-right">
@@ -86,8 +88,8 @@ export default function App() {
                 </select>
               </>
             )}
-            <button className="link" onClick={() => setTheme(isDark ? 'light' : 'dark')} aria-label={isDark ? 'Switch to light mode' : 'Switch to dark mode'}>
-              {isDark ? '☀ Light' : '☾ Dark'}
+            <button className="icon-btn" onClick={() => setTheme(isDark ? 'light' : 'dark')} aria-label={isDark ? 'Switch to light mode' : 'Switch to dark mode'} title={isDark ? 'Light mode' : 'Dark mode'}>
+              {isDark ? <Sun className="i" aria-hidden="true" /> : <Moon className="i" aria-hidden="true" />}
             </button>
           </div>
         </div>

@@ -934,13 +934,15 @@ def style_profile(team_id: int) -> dict:
     trend = [{"month": m, **{k: round(float(np.median(np.array(v)[:, i])), 3) for i, k in enumerate(STYLE_KEYS)},
               "n": len(v)} for m, v in sorted(by_month.items())]
     eng = art.get("engagement")
+    likes = {int(i): l for i, l in zip(d["id"], d["likes"])}
     return {
         "model_version": mv_id, "trained_at": trained_at, "metrics": metrics,
         "thresholds": art["thresholds"], "ranges": art["ranges"],
         "signature_palette": art["signature_palette"],
         "what_works": eng["what_works"] if eng else None,
         "trend": trend,
-        "map": [{"post_id": pid, "x": xy[0], "y": xy[1], "label": art["coord_labels"].get(pid, "other")}
+        "map": [{"post_id": pid, "x": xy[0], "y": xy[1], "label": art["coord_labels"].get(pid, "other"),
+                 "likes": likes.get(int(pid))}
                 for pid, xy in art["coords"].items()],
         "date_range": art.get("date_range"),
     }

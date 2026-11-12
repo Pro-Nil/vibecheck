@@ -7,3 +7,6 @@ frontend/dist/
 .pytest_cache/
 *.session
 data_demo*/
+.impeccable/questions/
+.impeccable/mocks/
+.impeccable/review/

@@ -1,26 +1,44 @@
 import React, { useEffect, useState } from 'react'
-import { api, fmtDate, LEVEL, pct } from '../api.js'
-import { FeatureStrips, Gauge, PluginPanel, Swatches } from '../components/Charts.jsx'
+import { ArrowRight, RotateCcw, TrendingDown, TrendingUp, Minus } from 'lucide-react'
+import { api, fmtDate, pct } from '../api.js'
+import { FeatureStrips, PluginPanel, StripLegend, Swatches } from '../components/Charts.jsx'
+import { Loading, Mark, Notice, PinnedPost, Stamp, VerdictChip } from '../components/ui.jsx'
 
-const ENG_ICON = { 'Above usual': '▲', Usual: '●', 'Below usual': '▼' }
-const SEV = { fail: ['✗', 'bad', 'must fix'], warn: ['!', 'warn', 'worth a look'], ok: ['✓', 'ok', 'fine'] }
+const ENG_ICON = { 'Above usual': TrendingUp, Usual: Minus, 'Below usual': TrendingDown }
+const SEV = { fail: ['bad', 'must fix'], warn: ['warn', 'worth a look'], ok: ['ok', 'fine'] }
+const OUTCOMES = [['approved', 'Approved'], ['rejected', 'Rejected'], ['posted', 'Posted']]
+const STAMP_DATE = s => (s ? new Date(s).toLocaleDateString(undefined, { day: 'numeric', month: 'short' }).toUpperCase() : '')
 
 function FinishCard({ finish }) {
   return (
-    <section className="card" aria-labelledby="fin-h">
+    <section className="paper" aria-labelledby="fin-h">
       <h2 id="fin-h">Finish checklist</h2>
       <p className="sub">{finish.must_fix ? `${finish.must_fix} to fix before posting, ` : 'Nothing that must be fixed, '}
-        {finish.warnings} worth a look. Each check is calibrated on this team's own posts, so it does not flag what the team normally does.
-        These are about readiness, not taste: they do not change the score.</p>
+        {finish.warnings} worth a look. Checks are calibrated on this team's own posts and are about readiness, not taste:
+        they do not change the score.</p>
       <ul className="reasons">
         {finish.checks.map(c => (
-          <li key={c.feature}>
-            <span className={`mark ${SEV[c.severity][1]}`} aria-label={SEV[c.severity][2]}>{SEV[c.severity][0]}</span>
-            <span><strong>{c.label}.</strong> {c.text}</span>
-          </li>
+          <li key={c.feature}><Mark kind={SEV[c.severity][0]} label={SEV[c.severity][1]} /><span><strong>{c.label}.</strong> {c.text}</span></li>
         ))}
       </ul>
     </section>
+  )
+}
+
+function Parts({ c, final }) {
+  const k = c.components
+  const items = [
+    k.looks_like !== undefined && ['Look', pct(k.looks_like), 'overall look vs the team'],
+    k.colour_match !== undefined && ['Colours', pct(k.colour_match), 'vs similar-topic posts'],
+    k.style_match !== undefined && ['Style', pct(k.style_match), 'vs similar-topic posts'],
+    k.classifier !== undefined && ['Team vs others', pct(k.classifier), 'looks like the team, not other pages'],
+    k.text !== undefined && ['Description', pct(k.text), 'description fit'],
+    k.approval !== undefined && ['Approval', pct(k.approval), `learned from decisions (weight ${pct(c.weights.approval)}%)`],
+  ].filter(Boolean)
+  return (
+    <div className="parts" aria-label="Parts of the score">
+      {items.map(([l, v, t]) => <div key={l} title={t}><b>{v}%</b><span>{l}</span></div>)}
+    </div>
   )
 }
 
@@ -28,159 +46,157 @@ export default function ResultPage({ checkId }) {
   const [c, setC] = useState(null)
   const [err, setErr] = useState('')
   const [saving, setSaving] = useState(false)
-  useEffect(() => { setC(null); api.getCheck(checkId).then(setC).catch(e => setErr(e.message)) }, [checkId])
+  useEffect(() => { setC(null); setErr(''); api.getCheck(checkId).then(setC).catch(e => setErr(e.message)) }, [checkId])
 
   const mark = async result => {
     setSaving(true)
     try { setC({ ...(await api.outcome(checkId, result)), plugins: c.plugins }) } catch (e) { setErr(e.message) } finally { setSaving(false) }
   }
 
-  if (err) return <p className="alert error" role="alert">{err}</p>
-  if (!c) return <p className="muted" role="status">Loading result…</p>
-  const lv = LEVEL[c.verdict_level]
-  const problems = c.reasons.filter(r => !r.ok)
-  const fits = c.reasons.filter(r => r.ok)
+  if (err) return <Notice kind="error">{err}</Notice>
+  if (!c) return <Loading>Loading the result…</Loading>
   const final = c.kind === 'final'
   const pvf = c.plan_vs_final
+  const problems = c.reasons.filter(r => !r.ok)
+  const fits = c.reasons.filter(r => r.ok)
+  const Eng = c.engagement ? ENG_ICON[c.engagement.band] : null
+  const stampText = c.outcome ? OUTCOMES.find(o => o[0] === c.outcome)?.[1] : c.verdict
 
   return (
-    <div className="stack">
-      <div className="row" style={{ justifyContent: 'space-between' }}>
-        <h1>{final ? 'Design check' : 'Vibe check'} #{c.id}</h1>
-        <div className="row">
-          {!final && <a className="btn" href={`#/final/${c.id}`}>Check my finished design</a>}
-          <a className="btn" href={final ? '#/final' : '#/check'}>{final ? 'Check another version' : 'Edit and re-check'}</a>
+    <div>
+      <div className="page-head">
+        <div className="titles">
+          <h1>{final ? 'Design check' : 'Idea check'} <span className="num">#{c.id}</span></h1>
+          <p className="meta">
+            {c.project ? <>Project “{c.project}” · </> : null}{c.user ? <>by {c.user} · </> : null}{fmtDate(c.created_at)} · model v{c.model_version}
+          </p>
+        </div>
+        <div className="actions">
+          <a className="btn" href={final ? '#/final' : '#/check'}><RotateCcw className="i" aria-hidden="true" />{final ? 'Check another version' : 'Edit and re-check'}</a>
+          {!final && <a className="btn primary" href={`#/final/${c.id}`}>Check my finished design<ArrowRight className="i" aria-hidden="true" /></a>}
         </div>
       </div>
 
-      <section className="card verdict" aria-labelledby="verdict-h">
-        <Gauge score={c.score} level={c.verdict_level} label={c.verdict} />
-        <div className="verdict-text" style={{ flex: 1, minWidth: 240 }}>
-          <h2 id="verdict-h" className="sr-only">Verdict</h2>
-          <div className="big" style={{ color: lv.color }}><span aria-hidden="true">{lv.icon} </span>{c.verdict}</div>
-          <p className="muted">
-            Score {Math.round(c.score)} / 100 ({Math.round(c.thresholds.approve)}+ on-brand, {Math.round(c.thresholds.borderline)}–{Math.round(c.thresholds.approve) - 1} borderline).
-            {c.components.on_brand !== undefined && c.components.classifier === undefined &&
-              <> Your {final ? 'design is' : 'images alone are'} more on-brand than {Math.round(c.components.on_brand * 100)}% of this team's own posts.</>}
-            {c.vs_new_posts != null && <> It fits better than <strong>{pct(c.vs_new_posts)}%</strong> of the posts this team actually published next (tested on posts the model had not seen).</>}
-          </p>
-          <p className="small muted">
-            {c.components.looks_like !== undefined && <>Overall look {pct(c.components.looks_like)} · colours vs similar-topic posts {pct(c.components.colour_match)}{c.components.style_match !== undefined && <> · style vs similar-topic posts {pct(c.components.style_match)}</>}</>}
-            {c.components.classifier !== undefined && <> · looks like the team vs other pages {pct(c.components.classifier)}%</>}
-            {c.components.text !== undefined && <> · description fit {pct(c.components.text)}%</>}
-            {c.components.approval !== undefined && <> · learned approval {pct(c.components.approval)}% (weight {pct(c.weights.approval)}%)</>}
-          </p>
-          {c.confidence && c.confidence.level !== 'high' && (
-            <p className="small" style={{ color: 'var(--text-2)' }}>
-              <strong>Confidence: {c.confidence.level}.</strong> {c.confidence.notes.map(n => n[0].toUpperCase() + n.slice(1)).join('. ')}.
+      <section className="board" aria-labelledby="verdict-h">
+        <div className="result-board">
+          <div className={`mine${!final && c.inspo_urls.length > 1 ? ' many' : ''}`}>
+            {c.inspo_urls.length > 0 ? c.inspo_urls.slice(0, 5).map((u, i) => (
+              <figure className={`pinned${c.per_image && c.inspo_urls.length > 1 ? ' has-plate' : ''}`} key={u} style={{ '--tilt': i === 0 ? '-1.6deg' : i % 2 ? '1.4deg' : '-0.8deg', '--pin-c': i === 0 ? 'var(--pin)' : undefined, margin: 0 }}>
+                <img src={u} alt={final ? 'Your finished design' : `Your inspiration image ${i + 1}`} style={final ? { aspectRatio: 'auto' } : undefined} />
+                {c.per_image && c.inspo_urls.length > 1 && <div className="nameplate"><span>image {i + 1}</span><strong className="num">{Math.round(c.per_image[i])}</strong></div>}
+                {i === 0 && <Stamp text={stampText} sub={`VibeCheck · ${STAMP_DATE(c.created_at)}`} press />}
+              </figure>
+            )) : (
+              <div className="pinned" style={{ '--tilt': '-1.2deg', '--pin-c': 'var(--pin)' }}>
+                <p style={{ color: '#14171a', padding: '28px 14px', minHeight: 200 }}>“{c.description}”</p>
+                <Stamp text={stampText} sub={`VibeCheck · ${STAMP_DATE(c.created_at)}`} press />
+              </div>
+            )}
+          </div>
+
+          <div>
+            <div className="score-n" aria-label={`Score ${Math.round(c.score)} out of 100`}>{Math.round(c.score)}<span>/ 100</span></div>
+            <div className="verdict-line">
+              <h2 id="verdict-h">{c.verdict}</h2>
+              <VerdictChip level={c.verdict_level}>{c.verdict_level === 'approve' ? 'fits the team' : c.verdict_level === 'borderline' ? 'close' : 'does not fit yet'}</VerdictChip>
+            </div>
+            <p className="score-note">
+              {Math.round(c.thresholds.approve)}+ is on-brand, {Math.round(c.thresholds.borderline)}–{Math.round(c.thresholds.approve) - 1} borderline.
+              {c.components.on_brand !== undefined && c.components.classifier === undefined &&
+                <> {final ? 'This design is' : 'Your images are'} more on-brand than <strong>{pct(c.components.on_brand)}%</strong> of the team's own posts.</>}
+              {c.vs_new_posts != null && <> It fits better than <strong>{pct(c.vs_new_posts)}%</strong> of the posts the team published next (posts the model had not seen).</>}
             </p>
-          )}
-          <div className="row">
-            {c.engagement && (
-              <span><span className="pill" style={{ color: 'var(--text-2)' }}><span aria-hidden="true">{ENG_ICON[c.engagement.band]}</span> {c.engagement.band} engagement</span>
-                <span className="small muted"> · predicted {c.engagement.predicted_vs_usual}× this page's usual likes</span></span>
+            {c.confidence && c.confidence.level !== 'high' && (
+              <p className="score-note"><strong>Confidence: {c.confidence.level}.</strong> {c.confidence.notes.map(n => n[0].toUpperCase() + n.slice(1)).join('. ')}.</p>
             )}
-            {c.appeal && (
-              <span className="small muted" title="LAION aesthetic score: general visual appeal as rated by many people. It predicts likes a little but is not this team's taste, so it does not change the verdict.">
-                Audience appeal: higher than {pct(c.appeal.percentile)}% of the team's posts (affects likes, not the verdict)
-              </span>
+            <Parts c={c} final={final} />
+            {(c.engagement || c.appeal) && (
+              <p className="score-note small" style={{ display: 'flex', gap: '6px 16px', flexWrap: 'wrap', alignItems: 'center' }}>
+                {c.engagement && <span style={{ display: 'inline-flex', gap: 6, alignItems: 'center' }}><Eng className="i" aria-hidden="true" />{c.engagement.band} likes expected ({c.engagement.predicted_vs_usual}× usual)</span>}
+                {c.appeal && <span title="LAION aesthetic score: general visual appeal. It predicts likes a little but is not this team's taste, so it does not change the verdict.">General appeal above {pct(c.appeal.percentile)}% of team posts (not part of the verdict)</span>}
+              </p>
             )}
           </div>
-          <div className="row small" style={{ marginTop: 8 }}>
-            <span className="muted">What did the seniors decide{final ? ' about this design' : ''}?</span>
-            {['approved', 'rejected', 'posted'].map(r => (
-              <button key={r} type="button" disabled={saving} aria-pressed={c.outcome === r} onClick={() => mark(r)}
-                style={c.outcome === r ? { borderColor: 'var(--accent)', borderWidth: 2 } : undefined}>{r}</button>
-            ))}
+
+          <div className="near">
+            <p className="board-label">Closest team posts</p>
+            <div className="near-grid">
+              {c.nearest.slice(0, 6).map((p, i) => <PinnedPost key={p.id} post={p} i={i} match={p.similarity} />)}
+            </div>
           </div>
-          {final && <p className="small muted">Marking this design accepted or rejected teaches the approval model{c.project ? ` (project “${c.project}”)` : ''}.</p>}
+        </div>
+      </section>
+
+      <section className="paper decide" aria-labelledby="decide-h" style={{ marginTop: 18 }}>
+        <div>
+          <h2 id="decide-h">What did the seniors decide?</h2>
+          <p className="sub">{final
+            ? <>Marking this design approved or rejected teaches the approval model{c.project ? <> for project “{c.project}”</> : null}.</>
+            : 'Recording the outcome lets the team see which ideas made it.'}</p>
           {c.finals?.length > 0 && (
-            <p className="small">Finished designs from this plan: {c.finals.map((f, i) => (
+            <p className="sub">Finished designs from this plan: {c.finals.map((f, i) => (
               <span key={f.id}>{i ? ', ' : ''}<a href={`#/result/${f.id}`}>#{f.id}</a> ({Math.round(f.score)}, {f.verdict})</span>))}</p>
           )}
         </div>
-        {c.inspo_urls.length > 0 && (
-          <div className="thumbs" style={{ width: final ? 200 : 260 }} aria-label={final ? 'Your design' : 'Your inspiration images'}>
-            {c.inspo_urls.map((u, i) => (
-              <div className="thumb" key={u} style={final ? { width: 200, height: 'auto' } : undefined}><img src={u} alt={final ? 'Your finished design' : `Your inspiration image ${i + 1}`} style={final ? { height: 'auto' } : undefined} />
-                {c.per_image && <span className="tag">{Math.round(c.per_image[i])}</span>}</div>
-            ))}
-          </div>
-        )}
-      </section>
-
-      {(c.finish || pvf) && (
-        <div className="grid cols-2">
-          {c.finish && <FinishCard finish={c.finish} />}
-          {pvf && (
-            <section className="card" aria-labelledby="pvf-h">
-              <h2 id="pvf-h">Plan vs final</h2>
-              <p className="sub">How the finished design compares with <a href={`#/result/${pvf.plan_check_id}`}>plan check #{pvf.plan_check_id}</a>.</p>
-              <div className="tiles">
-                <div className="tile"><div className="v">{Math.round(pvf.plan_score)} → {Math.round(c.score)}</div><div className="l">on-brand score, plan → final</div></div>
-                <div className="tile"><div className="v">{pct(pvf.similarity)}%</div><div className="l">look-alike with your plan's inspiration (CLIP). {pvf.similarity >= 0.8 ? 'You built what you planned.' : pvf.similarity >= 0.6 ? 'Same direction, changed along the way.' : 'Quite different from the plan.'}</div></div>
-              </div>
-              <p className="small muted">{c.score >= pvf.plan_score - 5 ? "The final kept (or improved on) the plan's fit with the team." : "The final drifted away from what made the plan fit; compare the reasons below with the plan's."}</p>
-            </section>
-          )}
-        </div>
-      )}
-
-      <div className="grid cols-2">
-        <section className="card" aria-labelledby="why-h">
-          <h2 id="why-h">Why</h2>
-          <p className="sub">{problems.length ? `${problems.length} thing${problems.length > 1 ? 's' : ''} off, ${fits.length} that fit.` : 'Everything we measure fits this team.'}</p>
-          <ul className="reasons">
-            {c.reasons.map(r => (
-              <li key={r.feature}>
-                <span className={`mark ${r.ok ? 'ok' : 'bad'}`} aria-label={r.ok ? 'fits' : 'off'}>{r.ok ? '✓' : '✗'}</span>
-                <span>{r.text}</span>
-              </li>
-            ))}
-          </ul>
-        </section>
-
-        <div className="stack">
-          {c.plan_style && (
-            <section className="card" aria-labelledby="strip-h">
-              <h2 id="strip-h">Your {final ? 'design' : 'plan'} vs the team's usual range</h2>
-              <div className="legend" aria-hidden="true">
-                <span><svg width="26" height="12"><rect x="1" y="1" width="24" height="10" rx="5" fill="#0072B2" fillOpacity=".22" stroke="#0072B2" /></svg>team's usual range (middle 80%)</span>
-                <span><svg width="12" height="12"><circle cx="6" cy="6" r="5" fill="#009E73" /></svg>yours, fits</span>
-                <span><svg width="12" height="12"><rect x="2" y="2" width="8" height="8" transform="rotate(45 6 6)" fill="#D55E00" /></svg>yours, off</span>
-              </div>
-              <FeatureStrips reasons={c.reasons} />
-            </section>
-          )}
-          <section className="card" aria-labelledby="pal-h">
-            <h2 id="pal-h">Colours</h2>
-            {c.plan_palette?.length > 0 && <><h3 className="small muted">{final ? 'Your design' : 'Your inspiration'}</h3><Swatches colors={c.plan_palette} label="Your inspiration's main colours" /></>}
-            <h3 className="small muted" style={{ marginTop: 12 }}>This team's signature palette</h3>
-            <Swatches colors={c.signature_palette} label="Team signature palette" />
-          </section>
-        </div>
-      </div>
-
-      <section className="card" aria-labelledby="near-h">
-        <h2 id="near-h">Closest past posts from the team</h2>
-        <p className="sub">What "on-brand" looks like near your idea.</p>
-        <div className="posts">
-          {c.nearest.map(p => (
-            <figure className="post" key={p.id} style={{ margin: 0 }}>
-              <img src={p.image_url} alt={p.caption ? `Past post: ${p.caption.slice(0, 120)}` : 'Past team post'} loading="lazy" />
-              <figcaption className="meta"><strong>{pct(p.similarity)}% similar</strong><br />{fmtDate(p.posted_at)}{p.likes != null ? ` · ${p.likes} likes` : ''}</figcaption>
-            </figure>
+        <div className="seg" role="group" aria-label="Seniors' decision">
+          {OUTCOMES.map(([r, l]) => (
+            <button key={r} type="button" disabled={saving} aria-pressed={c.outcome === r} onClick={() => mark(r)}>{l}</button>
           ))}
         </div>
       </section>
 
+      {(c.finish || pvf) && (
+        <div className="grid cols-2 section-gap">
+          {c.finish && <FinishCard finish={c.finish} />}
+          {pvf && (
+            <section className="paper" aria-labelledby="pvf-h">
+              <h2 id="pvf-h">Plan vs final</h2>
+              <p className="sub">Compared with <a href={`#/result/${pvf.plan_check_id}`}>plan check #{pvf.plan_check_id}</a>.</p>
+              <div className="ledger">
+                <div><b>{Math.round(pvf.plan_score)} → {Math.round(c.score)}</b><span>on-brand score, plan to final</span></div>
+                <div><b>{pct(pvf.similarity)}%</b><span>look-alike with the plan's inspiration. {pvf.similarity >= 0.8 ? 'You built what you planned.' : pvf.similarity >= 0.6 ? 'Same direction, changed along the way.' : 'Quite different from the plan.'}</span></div>
+              </div>
+              <p className="sub" style={{ marginTop: 14 }}>{c.score >= pvf.plan_score - 5 ? "The final kept (or improved on) the plan's fit with the team." : "The final drifted from what made the plan fit; compare the reasons with the plan's."}</p>
+            </section>
+          )}
+        </div>
+      )}
+
+      <div className="split section-gap">
+        <section className="paper" aria-labelledby="why-h">
+          <h2 id="why-h">Why</h2>
+          <p className="sub">{problems.length ? `${problems.length} thing${problems.length > 1 ? 's' : ''} off, ${fits.length} that fit.` : 'Everything we measure fits this team.'}</p>
+          <ul className="reasons">
+            {[...problems, ...fits].map(r => (
+              <li key={r.feature}><Mark kind={r.ok ? 'ok' : 'bad'} /><span>{r.text}</span></li>
+            ))}
+          </ul>
+        </section>
+
+        <div className="stack" style={{ marginTop: 0 }}>
+          {c.plan_style && (
+            <section className="paper" aria-labelledby="strip-h">
+              <h2 id="strip-h">Against the team's usual range</h2>
+              <StripLegend />
+              <div className="body"><FeatureStrips reasons={c.reasons} /></div>
+            </section>
+          )}
+          <section className="paper" aria-labelledby="pal-h">
+            <h2 id="pal-h">Colours</h2>
+            {c.plan_palette?.length > 0 && <><p className="sub">{final ? 'Your design' : 'Your inspiration'}</p><div className="body" style={{ marginTop: 8 }}><Swatches colors={c.plan_palette} label="Your main colours" /></div></>}
+            <p className="sub" style={{ marginTop: 16 }}>The team's signature palette</p>
+            <div className="body" style={{ marginTop: 8 }}><Swatches colors={c.signature_palette} label="Team signature palette" /></div>
+          </section>
+        </div>
+      </div>
+
       {c.plugins?.length > 0 && (
-        <section aria-labelledby="plug-h" className="stack">
-          <h2 id="plug-h">From plugins</h2>
+        <section aria-labelledby="plug-h" className="section-gap">
+          <h2 id="plug-h" style={{ marginBottom: 14 }}>From plugins</h2>
           <div className="grid cols-2">{c.plugins.map(p => <PluginPanel key={p.plugin_id} p={p} />)}</div>
         </section>
       )}
-      {c.description && <p className="small muted">Your description: “{c.description}” · model v{c.model_version} · {fmtDate(c.created_at)}</p>}
+      {c.description && <p className="sub section-gap">Your description: “{c.description}”</p>}
     </div>
   )
 }

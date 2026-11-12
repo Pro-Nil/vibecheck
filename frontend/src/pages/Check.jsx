@@ -1,5 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react'
+import { ImagePlus, LoaderCircle, Pin, X } from 'lucide-react'
 import { api, go } from '../api.js'
+import { Notice } from '../components/ui.jsx'
 
 const DRAFT_KEY = 'vibe.draft'
 function loadDraft() { try { return JSON.parse(sessionStorage.getItem(DRAFT_KEY)) || {} } catch { return {} } }
@@ -58,78 +60,93 @@ export default function CheckPage({ team, teamId, mode = 'plan', planId = null }
 
   if (team && !team.trained) {
     return (
-      <div className="stack">
-        <h1>{t.title}</h1>
-        <p className="alert">{team.name} has no trained model yet. <a href="#/setup">Import the team's posts first.</a></p>
+      <div>
+        <div className="page-head"><div className="titles"><h1>{t.title}</h1></div></div>
+        <Notice>{team.name} has no trained model yet. <a href="#/setup">Import the team's posts first.</a></Notice>
       </div>
     )
   }
+  const pick = () => input.current.click()
   return (
-    <form className="stack" onSubmit={submit}>
-      <h1>{t.title}</h1>
-      {mode === 'plan'
-        ? <p className="lead">Before you design, show what you plan to make. You'll get a vibe-match score for <strong>{team?.name}</strong>, the reasons, and the team's closest past posts. Finished already? <a href="#/final">Check your design instead.</a></p>
-        : <p className="lead">Done designing? Check the final poster against <strong>{team?.name}</strong>'s style and get a finish checklist before you send it to the seniors.</p>}
+    <form onSubmit={submit} noValidate>
+      <div className="page-head">
+        <div className="titles">
+          <h1>{t.title}</h1>
+          {mode === 'plan'
+            ? <p className="lead">Before you design, pin what you plan to make. You get a score for <strong>{team?.name}</strong>, the reasons in words, and the team's closest past posts. Finished already? <a href="#/final">Check your design instead.</a></p>
+            : <p className="lead">Done designing? Pin the final poster to check it against <strong>{team?.name}</strong>'s style and get a finish checklist before the seniors see it.</p>}
+        </div>
+      </div>
 
-      <section className="card" aria-labelledby="inspo-h">
-        <h2 id="inspo-h">{t.imgH} <span className="hint">{t.imgHint}</span></h2>
-        <p className="sub">{t.imgSub}</p>
-        <div className={`drop${over ? ' over' : ''}`} role="button" tabIndex={0}
-          onClick={() => input.current.click()}
-          onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); input.current.click() } }}
+      <section aria-labelledby="inspo-h">
+        <div className="row" style={{ justifyContent: 'space-between', marginBottom: 10 }}>
+          <h2 id="inspo-h">{t.imgH} <span className="hint num">{files.length}/{t.max}</span></h2>
+          <span className="hint">{t.imgSub}</span>
+        </div>
+        <div className={`board dropboard${over ? ' over' : ''}`}
           onDragOver={e => { e.preventDefault(); setOver(true) }} onDragLeave={() => setOver(false)}
-          onDrop={e => { e.preventDefault(); setOver(false); add(e.dataTransfer.files) }}
-          aria-label={t.drop}>
-          <strong>Drop {t.max === 1 ? 'your design' : 'images'} here</strong> or click to choose · {files.length}/{t.max}
+          onDrop={e => { e.preventDefault(); setOver(false); add(e.dataTransfer.files) }}>
+          {files.length === 0 ? (
+            <button type="button" className="hint-big" onClick={pick} style={{ width: '100%', background: 'transparent', font: 'inherit' }} aria-label={t.drop}>
+              <Pin aria-hidden="true" />
+              <strong>{t.max === 1 ? 'Pin your design here' : 'Pin your inspiration here'}</strong>
+              <span>Drop {t.max === 1 ? 'the image' : 'images'} or click to choose {t.max === 1 ? '' : `(up to ${t.max})`}</span>
+            </button>
+          ) : (
+            <div className="pins">
+              {files.map((f, i) => (
+                <figure className="pinned" key={i} style={{ '--tilt': ['-1.4deg', '1.1deg', '-0.6deg', '1.5deg', '-1deg'][i % 5], '--pin-c': 'var(--pin)', margin: 0 }}>
+                  <img src={urls[i]} alt={`${mode === 'final' ? 'Your design' : `Inspiration ${i + 1}`}: ${f.name}`} />
+                  <button type="button" className="unpin" onClick={() => setFiles(files.filter((_, j) => j !== i))} aria-label={`Remove ${f.name}`}><X className="i" aria-hidden="true" /></button>
+                </figure>
+              ))}
+              {files.length < t.max && (
+                <button type="button" className="add-tile" onClick={pick} style={{ background: 'transparent', font: 'inherit', color: 'var(--on-felt-2)' }}>
+                  <ImagePlus className="i" aria-hidden="true" />{t.max === 1 ? 'Replace' : 'Add another'}
+                </button>
+              )}
+            </div>
+          )}
         </div>
         <input ref={input} type="file" accept="image/*" multiple={t.max > 1} hidden onChange={e => { add(e.target.files); e.target.value = '' }} />
-        {files.length > 0 && (
-          <div className="thumbs" style={{ marginTop: 12 }}>
-            {files.map((f, i) => (
-              <div className="thumb" key={i}>
-                <img src={urls[i]} alt={`${mode === 'final' ? 'Your design' : `Inspiration ${i + 1}`}: ${f.name}`} />
-                <button type="button" onClick={() => setFiles(files.filter((_, j) => j !== i))} aria-label={`Remove ${f.name}`}>✕</button>
-              </div>
-            ))}
-          </div>
-        )}
       </section>
 
-      <section className="card" aria-labelledby="desc-h">
+      <section className="paper section-gap" aria-labelledby="desc-h">
         <h2 id="desc-h">{mode === 'plan' ? 'Describe your plan' : 'About this design'}</h2>
-        {mode === 'plan' && (
-          <div className="field">
-            <label htmlFor="desc" className="sr-only">Description</label>
-            <textarea id="desc" value={desc} onChange={e => setDesc(e.target.value)}
-              placeholder="dark background, neon green code text, big bold title, robot illustration" />
-            <span className="hint">Colours, layout, fonts, photo or illustration — whatever you have in mind.</span>
+        <div className="body">
+          {mode === 'plan' && (
+            <div className="field">
+              <label htmlFor="desc">Description <span className="hint">(colours, layout, fonts, photo or illustration)</span></label>
+              <textarea id="desc" value={desc} onChange={e => setDesc(e.target.value)}
+                placeholder="dark background, neon green code text, big bold title, robot illustration" />
+            </div>
+          )}
+          {mode === 'final' && (
+            <div className="field" style={{ maxWidth: 520 }}>
+              <label htmlFor="plan">Compare with my plan <span className="hint">(optional)</span></label>
+              <select id="plan" value={plan} onChange={e => setPlan(e.target.value)}>
+                <option value="">No plan check</option>
+                {plans.map(c => <option key={c.id} value={c.id}>#{c.id} · {Math.round(c.score)} · {(c.description || 'images only').slice(0, 50)}</option>)}
+              </select>
+            </div>
+          )}
+          <div className="fields">
+            <div className="field">
+              <label htmlFor="proj">Project <span className="hint">(optional)</span></label>
+              <input id="proj" value={project} onChange={e => setProject(e.target.value)} placeholder="finlit-talk" />
+            </div>
+            <div className="field">
+              <label htmlFor="who">Your name <span className="hint">(optional)</span></label>
+              <input id="who" value={user} onChange={e => setUser(e.target.value)} />
+            </div>
           </div>
-        )}
-        {mode === 'final' && (
-          <div className="field" style={{ maxWidth: 480 }}>
-            <label htmlFor="plan">Compare with my plan <span className="hint">(optional)</span></label>
-            <select id="plan" value={plan} onChange={e => setPlan(e.target.value)}>
-              <option value="">No plan check</option>
-              {plans.map(c => <option key={c.id} value={c.id}>#{c.id} · {Math.round(c.score)} · {(c.description || 'images only').slice(0, 50)}</option>)}
-            </select>
-          </div>
-        )}
-        <div className="row">
-          <div className="field" style={{ maxWidth: 260 }}>
-            <label htmlFor="proj">Project <span className="hint">(optional)</span></label>
-            <input id="proj" value={project} onChange={e => setProject(e.target.value)} placeholder="finlit-talk" />
-          </div>
-          <div className="field" style={{ maxWidth: 260 }}>
-            <label htmlFor="who">Your name <span className="hint">(optional)</span></label>
-            <input id="who" value={user} onChange={e => setUser(e.target.value)} />
-          </div>
+          <p className="hint" style={{ marginTop: 10 }}>Use the same project name for every version of one brief: when the seniors decide, the model learns which version won.</p>
         </div>
-        <span className="hint">Same project name for every version of one brief: when the seniors decide, the model learns which version won.</span>
       </section>
 
-      {err && <p className="alert error" role="alert">{err}</p>}
-      <div className="row">
-        <button className="primary" type="submit" disabled={busy}>{busy ? 'Checking…' : t.button}</button>
+      {err && <div className="section-gap"><Notice kind="error">{err}</Notice></div>}
+      <div className="row section-gap">
+        <button className="primary" type="submit" disabled={busy}>{busy && <LoaderCircle className="i spin" aria-hidden="true" />}{busy ? 'Checking…' : t.button}</button>
         {busy && <span className="muted small" role="status">{mode === 'final' ? 'Reading your design and its text (up to ~10 seconds)…' : 'Reading your images (a few seconds)…'}</span>}
       </div>
     </form>
