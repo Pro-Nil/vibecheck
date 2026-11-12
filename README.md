@@ -104,6 +104,30 @@ on-brand swaps (e.g. "replace #8A2BE2 with team coral #FF6F61") and show the gai
 - **Caption writer** (slot `result`): draft an Instagram caption and hashtags in the team's tone from the check's
   description and reasons (needs an LLM API key).
 
+**More creative ones** (each fits the existing contract: one webhook, one `Panel` back)
+- **Senior Simulator** (`result`): turns the reasons into the feedback a senior would actually say, e.g. "Love the
+  layout, but that purple isn't us. Coral or teal?". Rule-based templates per reason, so no LLM is needed; an LLM
+  version is optional. Good for a laugh in the demo, and it makes the reasons feel human.
+- **Doppelgänger Finder** (`result`): "Your poster's closest twin is the Hack Night post from 14 Aug (91%)". Reads
+  `nearest`, shows what that twin did differently (colour, text amount) and how many likes it got. Warns when a design
+  is *too* close to an old post ("people may think it's a repost").
+- **Streak and Badges** (`profile`): a light game for the design team: "3 on-brand checks in a row", "first design
+  approved without changes", "palette purist (5 checks, no off-palette colours)". Counts come from `GET /teams/{id}/checks`.
+- **Brief-to-Moodboard** (`result`, plan checks): from the plan's description and the team's signature palette, list
+  the 4–6 team posts to look at before designing, plus a do/don't list taken from the team's usual ranges.
+- **Accessibility Lint** (`result`): extends the finish checklist with colour-blind simulation notes ("the coral
+  title on teal is hard to tell apart for red-green colour blindness"), using `plan_palette` and Okabe-Ito style
+  checks. Pure maths, no ML.
+- **Trend Radar** (`profile`): "this team has been getting darker and busier since August" from the style trend, with
+  the posts that started it. A short weekly summary the design head can paste into the group chat.
+- **A/B Version Picker** (`result`, final checks with a project): compares every version checked for the same project
+  and recommends which one to send to the seniors, with the reason ("v1: same score, but cleaner text area").
+- **Festival Countdown Planner** (`profile`): given an event date, lays out a posting plan (teaser, reveal, reminders)
+  using the weekdays and post types that got the most likes for this team.
+
+Pick one that the plugin team can finish and demo; a small plugin that works end to end beats an ambitious one that
+half works.
+
 Current limits to know before building: the event carries features, not an image URL, so recolouring the actual
 poster isn't possible yet; plugin charts are drawn in one colour (see KNOWN_ISSUES.md).
 
