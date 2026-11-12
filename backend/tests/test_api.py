@@ -298,3 +298,21 @@ def test_smooth_scores_keep_order_below_every_team_post():
     ref = np.sort(np.random.default_rng(0).normal(0.7, 0.03, 50))
     lo, very_lo = _smooth_ecdf(ref, [ref.min() - 0.01, ref.min() - 0.2], _bandwidth(ref))
     assert 0 < very_lo < lo < 0.05
+
+
+def test_upload_with_meta_csv_keeps_dates_likes_and_projects(client):
+    tid = client.post("/teams", json={"name": "Meta upload", "other_pages": []}).json()["id"]
+    imgs = [("files", (f"p{i}.png", png(team_style_image(i + 500)), "image/png")) for i in range(3)]
+    imgs.append(("files", ("2026-04-02_18-30-00_UTC.png", png(team_style_image(599)), "image/png")))
+    meta = "filename,posted_at,likes,caption,project\np0.png,2026-03-01,120,first,brief-a\np1.png,2026-03-05,80,,brief-b\n"
+    r = client.post(f"/teams/{tid}/import/upload", files=imgs + [("meta", ("meta.csv", meta.encode(), "text/csv"))],
+                    data={"label": "accepted", "project": "fallback", "train": "false"})
+    assert r.status_code == 201, r.text
+    assert r.json()["added"] == 4 and r.json()["with_meta"] == 2 and r.json()["job_id"] is None
+    items = {p["caption"] or p["id"]: p for p in client.get(f"/teams/{tid}/posts", params={"label": "team", "limit": 10}).json()["items"]}
+    got = [(p["likes"], (p["posted_at"] or "")[:10], p.get("project")) for p in items.values()]
+    assert (120, "2026-03-01", "brief-a") in got and (80, "2026-03-05", "brief-b") in got
+    assert (None, "2026-04-02", "fallback") in got          # date from an Instaloader-style file name
+    bad = client.post(f"/teams/{tid}/import/upload", files=imgs[:1] + [("meta", ("m.csv", b"name,likes\nx,1\n", "text/csv"))],
+                      data={"label": "team", "train": "false"})
+    assert bad.status_code == 400

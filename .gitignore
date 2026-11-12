@@ -10,3 +10,6 @@ data_demo*/
 .impeccable/questions/
 .impeccable/mocks/
 .impeccable/review/
+frontend/src/fonts/
+synthetic_dataset/
+data_test/

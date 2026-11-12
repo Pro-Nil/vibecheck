@@ -23,12 +23,13 @@ export const api = {
   createTeam: body => req('POST', '/teams', body),
   patchTeam: (id, body) => req('PATCH', `/teams/${id}`, body),
   startImport: (id, body) => req('POST', `/teams/${id}/import`, body),
-  uploadMany: (id, files, label, project = '') => {
+  uploadMany: (id, files, label, project = '', { meta = null, train = true } = {}) => {
     const f = new FormData()
     files.forEach(x => f.append('files', x))
     f.append('label', label)
     f.append('project', project)
-    f.append('train', 'true')
+    if (meta) f.append('meta', meta)
+    f.append('train', train ? 'true' : 'false')
     return req('POST', `/teams/${id}/import/upload`, f, true)
   },
   job: id => req('GET', `/jobs/${id}`),

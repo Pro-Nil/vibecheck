@@ -68,6 +68,26 @@ def _parse_date(s: str | None) -> datetime | None:
     return None
 
 
+def parse_meta_csv(text: str) -> dict[str, dict]:
+    """meta.csv text -> {filename: row}. Needs a 'filename' column; other columns are optional."""
+    rows = list(csv.DictReader(text.splitlines()))
+    if rows and "filename" not in rows[0]:
+        raise ValueError("meta.csv needs a 'filename' column")
+    return {Path(r["filename"].strip()).name: {k.strip(): (v or "").strip() for k, v in r.items() if k} for r in rows if r.get("filename")}
+
+
+def date_from(value: str | None, filename: str = "") -> datetime | None:
+    """A post date from a meta.csv value, or from an Instaloader-style file name (2026-03-14_18-00-00_UTC)."""
+    d = _parse_date(value)
+    if d is None and (st := _IG_STAMP.search(filename)):
+        d = datetime.strptime(" ".join(st.groups()), "%Y-%m-%d %H %M %S")
+    return d
+
+
+def as_int(v) -> int | None:
+    return _int(v)
+
+
 def _int(v) -> int | None:
     try:
         return int(float(v))

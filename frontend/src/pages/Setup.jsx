@@ -88,6 +88,7 @@ export default function SetupPage({ team, teamId, setTeamId, reloadTeams, firstR
   const [label, setLabel] = useState('team')
   const [project, setProject] = useState('')
   const [files, setFiles] = useState([])
+  const [trainAfter, setTrainAfter] = useState(true)
   const [msg, setMsg] = useState('')
   const [err, setErr] = useState('')
   const [bump, setBump] = useState(0)
@@ -110,10 +111,13 @@ export default function SetupPage({ team, teamId, setTeamId, reloadTeams, firstR
     setMsg('Import started. Downloading can take several minutes per page.')
     setBump(b => b + 1)
   })
+  const images = files.filter(f => !/\.csv$/i.test(f.name))
+  const metaFile = files.find(f => /\.csv$/i.test(f.name)) || null
   const upload = () => act(async () => {
-    if (!files.length) throw new Error('Choose some images first.')
-    const r = await api.uploadMany(teamId, files, label, project)
-    setMsg(`Uploaded ${r.added} images as “${label}”. Features and retraining are running.`)
+    if (!images.length) throw new Error('Choose some images first.')
+    const r = await api.uploadMany(teamId, images, label, project, { meta: metaFile, train: trainAfter })
+    setMsg(`Uploaded ${r.added} images as “${label}”${metaFile ? ` (${r.with_meta} matched a row in ${metaFile.name})` : ''}. `
+      + (trainAfter ? 'Features and retraining are running.' : 'Not retrained yet: press Retrain now when everything is uploaded.'))
     setFiles([])
     setBump(b => b + 1)
   })
@@ -197,11 +201,15 @@ export default function SetupPage({ team, teamId, setTeamId, reloadTeams, firstR
               </div>
             )}
             <div className="field">
-              <label htmlFor="files">Images</label>
-              <input id="files" type="file" accept="image/*" multiple onChange={e => setFiles([...e.target.files])} />
-              <p className="hint num" style={{ marginTop: 6 }}>{files.length ? `${files.length} selected` : 'JPG, PNG or WebP'}</p>
+              <label htmlFor="files">Images <span className="hint">(and an optional meta.csv)</span></label>
+              <input id="files" type="file" accept="image/*,.csv" multiple onChange={e => setFiles([...e.target.files])} />
+              <p className="hint num" style={{ marginTop: 6 }}>
+                {files.length ? `${images.length} image${images.length === 1 ? '' : 's'} selected${metaFile ? ` + ${metaFile.name}` : ''}` : 'JPG, PNG or WebP.'}
+                {' '}A meta.csv (columns filename, posted_at, likes, caption, project) adds post dates, likes and per-image projects.
+              </p>
             </div>
-            <div className="field"><button className="primary" onClick={upload} disabled={!files.length}><Upload className="i" aria-hidden="true" />Upload and retrain</button></div>
+            <div className="check-row"><input id="tra" type="checkbox" checked={trainAfter} onChange={e => setTrainAfter(e.target.checked)} /><label htmlFor="tra">Retrain after this upload <span className="hint">(untick while you upload several batches, then press Retrain now)</span></label></div>
+            <div className="field"><button className="primary" onClick={upload} disabled={!images.length}><Upload className="i" aria-hidden="true" />{trainAfter ? 'Upload and retrain' : 'Upload'}</button></div>
           </div>
         </section>
       </div>

@@ -31,12 +31,22 @@ Then run the app with `VIBE_DATA_DIR=data_demo`. Demo Studio is an imaginary tea
 seniors (hidden rules + 10 % inconsistent decisions), so the approval model has enough decided designs to switch on.
 It shows the learning loop works; it says nothing about a real team's taste. See [DEMO.md](DEMO.md).
 
+**Or set the same team up from zero through the app** (nothing pre-trained):
+
+```bash
+.venv/Scripts/python scripts/export_synthetic_dataset.py   # upload-ready folders in synthetic_dataset/, no training
+```
+Start the app on an empty data folder (`VIBE_DATA_DIR=data_test`), create the team, and upload the four folders in
+Team setup (select all files in each folder, including its `meta.csv`, which adds dates, likes and per-image projects).
+`synthetic_dataset/README.md` has the steps; `5_test_kit/` has new posters to check, with the seniors' answers.
+
 ## Run it
 
 ```bash
 python -m venv .venv
 .venv/Scripts/python -m pip install torch torchvision --index-url https://download.pytorch.org/whl/cpu
 .venv/Scripts/python -m pip install -r requirements.txt
+.venv/Scripts/python scripts/get_fonts.py                 # once: UI fonts into frontend/src/fonts (works offline after)
 cd frontend && npm install && npm run build && cd ..
 .venv/Scripts/python -m uvicorn vibe.main:app --app-dir backend --port 8000
 ```

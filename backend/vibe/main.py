@@ -165,22 +165,37 @@ async def upload_many(team_id: int, files: list[UploadFile] = File(...),
                                         "'accepted' and 'rejected' are designs the seniors decided on; they train the approval model."),
                       project: str = Form("", description="Which brief/project these designs were for, e.g. 'finlit-talk'. "
                                           "Versions of one brief let the model learn which version wins."),
+                      meta: UploadFile | None = File(None, description="Optional meta.csv with columns filename and any of "
+                                                     "posted_at (YYYY-MM-DD), likes, caption, project. A project in the "
+                                                     "file overrides the form's project for that image."),
                       train: bool = Form(True)):
     if label not in ("team", "other", "rejected", "accepted"):
         raise HTTPException(400, "label must be team, other, accepted or rejected")
     with SessionLocal() as s:
         _team(s, team_id)
-    n = 0
+    rows = {}
+    if meta is not None and meta.filename:
+        try:
+            rows = importers.parse_meta_csv((await meta.read()).decode("utf-8-sig"))
+        except Exception as e:
+            raise HTTPException(400, f"Could not read {meta.filename}: {e}")
+    n = with_meta = 0
     for f in files:
         data, _ = await _read_image(f)
-        importers.add_upload(team_id, data, f.filename or "upload.png", "team" if label == "accepted" else label,
-                             decision="accepted" if label == "accepted" else None, project=project.strip() or None)
+        name = Path(f.filename or "upload.png").name
+        row = rows.get(name, {})
+        with_meta += bool(row)
+        importers.add_upload(team_id, data, name, "team" if label == "accepted" else label,
+                             caption=row.get("caption") or "", likes=importers.as_int(row.get("likes")),
+                             posted_at=importers.date_from(row.get("posted_at"), name),
+                             decision="accepted" if label == "accepted" else None,
+                             project=(row.get("project") or project).strip() or None)
         n += 1
     job = None
     if train:
         job = pipeline.new_job("retrain", team_id)
         _start(job, pipeline.run_refresh, team_id, fetch=False)
-    return {"added": n, "job_id": job}
+    return {"added": n, "with_meta": with_meta, "job_id": job}
 
 
 @app.get("/jobs/{job_id}", tags=["data"])
