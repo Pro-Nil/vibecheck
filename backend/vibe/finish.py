@@ -235,7 +235,7 @@ def _headline_contrast(t: dict) -> float | None:
 
 def team_ranges(typos: list[dict]) -> dict:
     typos = [t for t in typos if t]
-    cols = {k: [t.get(k) for t in typos] for k in ("text_area", "n_lines", "headline", "aspect") + LAYOUT_KEYS}
+    cols = {k: [t.get(k) for t in typos] for k in ("text_area", "n_lines", "headline", "aspect", "edge_margin") + LAYOUT_KEYS}
     cols["weak_share"] = [_weak_share(t) for t in typos]
     cols["headline_contrast"] = [_headline_contrast(t) for t in typos]
     out = {}

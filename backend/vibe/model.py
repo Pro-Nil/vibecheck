@@ -79,8 +79,9 @@ APPROVAL_CLIP_PCS = 0     # CLIP directions for the approval model; 8 and 16 tes
 # +/-0.10-0.15, so a fixed 0.60 bar lets a lucky model in. It must also be better than guessing at the low end
 # of a bootstrap 90 % interval, and not worse than the plain on-brand score on the same designs.
 APPROVAL_CI_LOW = 0.5
-ARTIFACT_VERSION = 7          # v7: + layout, typeface and clutter inputs (v6: style match vs same-topic posts)
-COMPATIBLE_VERSIONS = (6, 7)  # v6 models still score (without the v7 inputs) until the team retrains
+ARTIFACT_VERSION = 8          # v8: brief left out of its own comparison, off-range inputs saturate, + edge margin
+                              # (v7: + layout, typeface and clutter inputs; v6: style match vs same-topic posts)
+COMPATIBLE_VERSIONS = (6, 7, 8)  # older models still score (the way they were trained) until the team retrains
 _cache: dict[int, tuple[int, dict]] = {}
 _cache_lock = threading.Lock()
 
@@ -202,7 +203,7 @@ class _OnBrand:
         self.ref_combined = np.sort([self._z(*self._pcts(*r)) for r in raw])
         self.h_combined = _bandwidth(self.ref_combined)
 
-    def _raw(self, v, h, st=None, exclude: int | None = None) -> tuple:
+    def _raw(self, v, h, st=None, exclude: int | list[int] | None = None) -> tuple:
         sims = self.vecs @ v
         ok = sims < TWIN_SIM                       # drop near-twins (and the post itself)
         if exclude is not None:
@@ -233,7 +234,7 @@ class _OnBrand:
             return (LOOK_WEIGHT * _probit(lp) + _probit(cp)) / (LOOK_WEIGHT + 1)
         return (LOOK_WEIGHT * _probit(lp) + _probit(cp) + STYLE_WEIGHT * _probit(sp)) / (LOOK_WEIGHT + 1 + STYLE_WEIGHT)
 
-    def parts(self, v, h, st=None, exclude: int | None = None) -> dict:
+    def parts(self, v, h, st=None, exclude: int | list[int] | None = None) -> dict:
         lp, cp, sp = self._pcts(*self._raw(v, h, st, exclude))
         out = {"looks_like": lp, "colour_match": cp,
                "on_brand": float(_smooth_ecdf(self.ref_combined, self._z(lp, cp, sp), self.h_combined)[0])}
@@ -464,6 +465,7 @@ USE_LAYOUT = True    # layout / typeface / clutter inputs (finish.LAYOUT_KEYS); 
 APPROVAL_INPUTS = (["looks_like", "colour_match", "style_match"] + [f"off_{k}" for k in STYLE_KEYS]
                    + ["off_text_area", "off_headline", "off_low_contrast_share", "weak_headline", "appeal"]
                    + ([f"off_{k}" for k in finish.LAYOUT_KEYS] if USE_LAYOUT else [])
+                   + ["off_edge_margin"]
                    + [f"look_direction_{i + 1}" for i in range(32)])
 
 
@@ -476,7 +478,11 @@ def _off(v: float | None, r: dict | None) -> float:
 
 
 def _approval_x(parts: dict, style: np.ndarray, ranges: dict, typo: dict | None, typo_ranges: dict,
-                appeal_pct: float, clip_pcs: np.ndarray | None = None, layout: bool = USE_LAYOUT) -> np.ndarray:
+                appeal_pct: float, clip_pcs: np.ndarray | None = None, layout: bool = USE_LAYOUT,
+                v8: bool = True) -> np.ndarray:
+    """Approval-model inputs. v8 (default) adds the edge margin and saturates every off-range input at 1 range width:
+    "clearly outside the team's range" counts the same however far out, so one extreme value cannot swamp the rest.
+    layout=False / v8=False rebuild the inputs older models were trained on."""
     t = typo or {}
     x = [parts["looks_like"], parts["colour_match"], parts.get("style_match", 0.5)]
     x += [_off(float(style[i]), ranges[k]) for i, k in enumerate(STYLE_KEYS)]
@@ -486,6 +492,9 @@ def _approval_x(parts: dict, style: np.ndarray, ranges: dict, typo: dict | None,
           appeal_pct]
     if layout:   # capped: a team with very uniform type has a narrow range, which would make offsets explode
         x += [min(4.0, _off(t.get(k), typo_ranges.get(k))) for k in finish.LAYOUT_KEYS]
+    if v8:
+        x.append(_off(t.get("edge_margin"), typo_ranges.get("edge_margin")))
+        x[3:] = [min(1.0, v) for v in x[3:]]   # appeal and weak_headline are already 0-1
     if clip_pcs is not None:
         x += list(clip_pcs)
     return np.array(x, np.float32)
@@ -524,9 +533,16 @@ def _approval(d: dict, ob: "_OnBrand", team_rows: np.ndarray, ranges: dict, typo
     if len(idx) == 0:
         return None, status
     basis = _clip_basis(d["clip"][team_rows], APPROVAL_CLIP_PCS)
+    # Compare each design with the team's posts minus every design from the SAME brief, not just itself: an accepted
+    # sibling version would otherwise make a rejected one look on-brand in a way a genuinely new design never does.
+    brief_rows = defaultdict(list)
+    for r in team_rows:
+        if d["project"][r]:
+            brief_rows[d["project"][r]].append(pos_in_team[int(r)])
     X, ob_score = [], []
     for i in idx:
-        parts = ob.parts(d["clip"][i], d["hist"][i], d["style"][i], exclude=pos_in_team.get(int(i)))  # leave itself out
+        leave_out = brief_rows.get(d["project"][i]) or pos_in_team.get(int(i))
+        parts = ob.parts(d["clip"][i], d["hist"][i], d["style"][i], exclude=leave_out)
         a = d["aesthetic"][i]
         ap = float(_ecdf(team_aes, a)[0]) if np.isfinite(a) and len(team_aes) else 0.5
         X.append(_approval_x(parts, d["style"][i], ranges, d["typo"][i], typo_ranges, ap, _pcs(basis, d["clip"][i])))
@@ -830,7 +846,7 @@ def score(team_id: int, images: list[Image.Image], description: str = "", kind: 
         if appr is not None:
             x = _approval_x(parts, plan_style, art["ranges"], typo, art.get("typo_ranges", {}),
                             appeal["percentile"] if appeal else 0.5, _pcs(appr.get("basis"), plan_vec),
-                            layout=USE_LAYOUT and art.get("version", 0) >= 7)
+                            layout=USE_LAYOUT and art.get("version", 0) >= 7, v8=art.get("version", 0) >= 8)
             p_ok = float(appr["model"].predict_proba(x[None])[0, 1])
             out["components"]["approval"] = round(p_ok, 3)
             out["weights"]["approval"] = round(appr["weight"], 3)

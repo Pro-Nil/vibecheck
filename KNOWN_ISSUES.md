@@ -4,11 +4,44 @@ Honest status as of 13 Nov 2026. Everything below was found by running the app o
 74 posts from one fest's Instagram page (Mar–Nov 2026) and 9 drafts of one talk poster that the design
 team rejected, plus 2 posters the team accepted.
 
-**Short version:** the pipeline, API, plugins and dashboards work end to end. Model v7 (v6 + layout, typeface and clutter features) ranks the team's real
+**Short version:** the pipeline, API, plugins and dashboards work end to end. Model v8 (v7 with cleaner approval-model training; v7 added layout, typeface and clutter features) ranks the team's real
 new posts above its rejected drafts (AUC 0.90 on posts it had not seen) and both accepted one-offs above all 9
 rejects (was AUC 0.53 in v2). It is still tested on very little: all rejected drafts come from one brief and only
 2 accepted designs are on record.
 More decided designs (see "Improvements") are what would move it further.
+
+## 0000000. Model v8 (13 Nov 2026): cleaner approval-model training
+
+Where v7 still lost points, measured on the synthetic team rather than guessed. If the approval model were handed the
+exact rules each design broke, the same 120 decisions would give **0.89** held-out AUC (v7: 0.81). So the gap was the
+inputs, not too few decisions. The detectors were not the problem: each broken rule is spotted at AUC 0.96-1.00, except
+cramped (0.71) and no-accent (0.84). Three changes, each small, kept only because they held up on two independent sets
+of 60 new briefs (seeds 999 and 2024, paired bootstrap over briefs):
+
+- **Leave the whole brief out.** When the approval model learns from a rejected version, its on-brand inputs compared
+  it with the team's posts *including its accepted sibling* from the same brief. A brand-new design never has such a
+  sibling, so training inputs looked more on-brand than real ones. Now every design from the same brief is left out.
+- **Saturate off-range inputs at 1 range width.** "Clearly outside the team's range" now counts the same however far
+  out, so one extreme value (a team with very uniform headlines has a narrow range) cannot swamp the rest.
+- **Edge margin** (closest text to the image edge) as an input: it spots cramped layouts at AUC 0.99.
+
+| Held-out, both sets pooled (360 versions) | AUC change vs v7 | 90 % interval |
+|---|---|---|
+| leave brief out | +0.003 | -0.000 to +0.006 |
+| saturate | +0.005 | -0.002 to +0.012 |
+| **all three (shipped)** | **+0.013** | **+0.005 to +0.021** (better in 100 % of resamples) |
+
+End to end (retrained app, `eval_demo_team.py 60`): final AUC **0.81 → 0.83**, seniors' pick ranked first **77 % →
+82 %**; median score wrong typeface 46 → 36, cramped 46 → 41, clean designs unchanged at 84. Real data (Techkriti,
+approval model off): time-forward AUC 0.90, unchanged.
+
+**Tried and not kept** (same harness, test AUC; v7 0.81): binary "outside range" flags 0.77; boosted stumps 0.73-0.79
+and depth-2 trees 0.76 (overfit 120 decisions); L1 logistic 0.73-0.80; other regularisation strengths 0.79-0.81;
+a weight cap above 0.6 (no change); largest-accent-shape input (spots no-accent at 1.00, but test AUC 0.80: the
+seniors barely care about that rule, weight 0.4). The remaining gap to 0.89 is mostly how continuous measurements
+turn into "this rule is broken"; more decided briefs would close more of it than another model.
+
+Models trained before v8 keep scoring exactly as they were trained until the team retrains.
 
 ## 000000. Model v7 (13 Nov 2026): layout, typeface and clutter features; a better confidence rule
 
