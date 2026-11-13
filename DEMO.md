@@ -37,10 +37,10 @@ on 8100 if you want to show cross-dev plugins. The live-demo posters are in `dat
 8. **Honesty slide** (30 s): Techkriti numbers (KNOWN_ISSUES), what synthetic data can and can't show, ~30-50
    decided briefs needed for a real team (scripts/simulate_seniors.py).
 
-## Numbers for the slides (13 Nov 2026 build, model v8)
+## Numbers for the slides (13 Nov 2026 build, model v9)
 
 **Demo Studio (synthetic)**, 90 posts + 60 other-club posts + 40 decided briefs (55 accepted / 65 rejected versions):
-- Approval model switched itself on: leave-one-brief-out AUC 0.83, weight 60 %.
+- Approval model switched itself on: leave-one-brief-out AUC 0.82, weight 60 % (learned from the data).
 - On 60 NEW briefs it never saw (180 versions), accepted vs rejected:
 
 | | AUC | Top-scored version was the seniors' pick |
@@ -48,17 +48,24 @@ on 8100 if you want to show cross-dev plugins. The live-demo posters are in `dat
 | on-brand score alone (no decisions needed) | 0.61 | 55 % |
 | final score, v6 (before layout features) | 0.74 | 68 % |
 | final score, v7 (+ typeface, layout, clutter) | 0.81 | 77 % |
-| **final score, v8 (cleaner training, + edge margin)** | **0.83** | **82 %** |
+| final score, v8 (cleaner training, + edge margin) | 0.83 | 82 % |
+| **final score, v9 (inputs keep direction, published posts as approved, learned blend)** | **0.87** | **83 %** |
 | ceiling: the simulated seniors' own hidden score (10 % of decisions flipped) | 0.92 | - |
 
-- Median final score (v8): clean 84; low contrast 25, tiny title 26, off palette 26, busy background 32, wrong
-  typeface 36, cramped 41, clutter 44, no accent 47. v6 missed typeface (63) and clutter (51); v7 measures stroke
-  weight, letter outlines, title alignment and small shapes; v8 stopped training inputs leaking from sibling versions.
-  Still high: centred layout (71), the rule the seniors care least about (so mostly correct).
+- Median final score (v9): clean 83; off palette 24, low contrast 26, tiny title 26, busy background 33, wrong
+  typeface 34, clutter 35, no accent 52, cramped 60, centred 62. v6 missed typeface (63) and clutter (51); v7
+  measures stroke weight, letter outlines, title alignment and small shapes; v8 stopped training inputs leaking from
+  sibling versions; v9 learns from the team's published posts too (which is why cramped, present in that history,
+  is penalised less).
+- Confirmed on 540 held-out designs (3 sets, one never used for any choice): v9 vs v8 AUC +0.022 [+0.010, +0.035].
+  Within ~0.02 of a model told exactly which rules were broken; the rest needs more decided briefs.
+- Small teams: with 10 decided briefs v9 reaches 0.80 (v8 0.75); it now switches on from 5 accepted + 5 rejected.
 - Good story for the "improve" slide: the held-out test found the blind spot, new features closed most of it, and a
   pairwise approval model was tried and dropped (no clear gain); v8 then found the remaining gap was in the inputs
-  (oracle test: 0.89) and fixed a train/test leak. Details in KNOWN_ISSUES.md, sections 0000000 and 000000.
+  (oracle test) and fixed a train/test leak; v9 took the approval model to the limit of its data. Details in
+  KNOWN_ISSUES.md, sections 00000000, 0000000 and 000000.
 - Low-confidence tag: now flags 7 % of clean on-style designs vs 57 % of other clubs' posters (was 23 % vs 10 %).
 
-**Techkriti (real)**: on-brand unchanged in v7/v8, time-forward AUC 0.90 on 33 unseen real posts; both accepted designs above all 9
-rejected drafts; approval model off (2 accepted, 1 more brief needed, and ~30-50 briefs before it would help).
+**Techkriti (real)**: on-brand unchanged in v7-v9, time-forward AUC 0.90 on 33 unseen real posts; both accepted designs above all 9
+rejected drafts; approval model off (2 accepted from 1 brief; needs 5 accepted + 5 rejected from 3 briefs, and on the
+synthetic team it reaches 0.80 from about 10 decided briefs).

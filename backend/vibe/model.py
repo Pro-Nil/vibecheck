@@ -70,18 +70,20 @@ NEW_POST_ON_RATE = 0.50   # ... and share that reaches "on-brand" (the median ne
 MIN_CALIBRATION = 15      # new-post scores needed to calibrate the lines
 NEAR_MISS_MAX_SIM = 0.85  # near-misses closer than this to their original are contradictory, not used
 STYLE_TOLERANCE = 0.04    # a feature within 4 points of the team's usual range still counts as fitting
-MIN_DECIDED = 8           # accepted AND rejected designs needed before the approval model is used
+MIN_DECIDED = 5           # accepted AND rejected designs needed before the approval model is used (v9: was 8;
+                          # the AUC / interval / vs-on-brand checks keep it off until it helps, see KNOWN_ISSUES)
 MIN_PROJECTS = 3          # ...from at least this many different projects (briefs)
 MIN_APPROVAL_AUC = 0.60   # leave-one-project-out AUC it must reach to be used
-MAX_APPROVAL_WEIGHT = 0.6
+MAX_APPROVAL_WEIGHT = 0.8   # v9: the weight itself is learned (below); v6-v8 used min(0.6, 2 * (AUC - 0.5))
 APPROVAL_CLIP_PCS = 0     # CLIP directions for the approval model; 8 and 16 tested on the demo team: no gain, so off
 # Switch-on rule, from scripts/simulate_seniors.py: with 5-12 projects the leave-one-project-out AUC swings
 # +/-0.10-0.15, so a fixed 0.60 bar lets a lucky model in. It must also be better than guessing at the low end
 # of a bootstrap 90 % interval, and not worse than the plain on-brand score on the same designs.
 APPROVAL_CI_LOW = 0.5
-ARTIFACT_VERSION = 8          # v8: brief left out of its own comparison, off-range inputs saturate, + edge margin
-                              # (v7: + layout, typeface and clutter inputs; v6: style match vs same-topic posts)
-COMPATIBLE_VERSIONS = (6, 7, 8)  # older models still score (the way they were trained) until the team retrains
+ARTIFACT_VERSION = 9          # v9: approval inputs as (vs team, outside range), no look/colour inputs, published posts
+                              # as approved examples, learned blend weight (v8: brief left out, saturation, edge margin;
+                              # v7: + layout, typeface and clutter inputs; v6: style match vs same-topic posts)
+COMPATIBLE_VERSIONS = (6, 7, 8, 9)  # older models still score (the way they were trained) until the team retrains
 _cache: dict[int, tuple[int, dict]] = {}
 _cache_lock = threading.Lock()
 
@@ -462,11 +464,16 @@ def _style_map(d: dict, max_other: int = 1500):
 
 # --------------------------------------------------------------------- approval
 USE_LAYOUT = True    # layout / typeface / clutter inputs (finish.LAYOUT_KEYS); see KNOWN_ISSUES for the test
-APPROVAL_INPUTS = (["looks_like", "colour_match", "style_match"] + [f"off_{k}" for k in STYLE_KEYS]
-                   + ["off_text_area", "off_headline", "off_low_contrast_share", "weak_headline", "appeal"]
-                   + ([f"off_{k}" for k in finish.LAYOUT_KEYS] if USE_LAYOUT else [])
-                   + ["off_edge_margin"]
-                   + [f"look_direction_{i + 1}" for i in range(32)])
+HISTORY_WEIGHT = 0.5  # v9: the team's own published posts join training as approved designs, at half weight
+APPROVAL_C = 0.1      # v9: logistic regularisation (v6-v8: 0.3)
+# v9 measurements: each enters twice, as where it sits vs the team (signed, in range widths from the median, clipped
+# to +-2) and as how far outside the team's usual range it is (saturated at 1 range width).
+TYPO_MEASURES = ("text_area", "headline", "weak_share", "headline_contrast") + finish.LAYOUT_KEYS + ("edge_margin",)
+V9_MEASURES = tuple(f"style_{k}" for k in STYLE_KEYS) + TYPO_MEASURES
+V8_INPUTS = (["looks_like", "colour_match", "style_match"] + [f"off_{k}" for k in STYLE_KEYS]
+             + ["off_text_area", "off_headline", "off_low_contrast_share", "weak_headline", "appeal"]
+             + [f"off_{k}" for k in finish.LAYOUT_KEYS] + ["off_edge_margin"])
+APPROVAL_INPUTS = ["appeal"] + [n for k in V9_MEASURES for n in (f"{k}_vs_team", f"off_{k}")]
 
 
 def _off(v: float | None, r: dict | None) -> float:
@@ -477,24 +484,43 @@ def _off(v: float | None, r: dict | None) -> float:
     return float(max(0.0, r["p10"] - v, v - r["p90"]) / width)
 
 
+def _vs_team(v: float | None, r: dict | None) -> float:
+    """Where a value sits relative to the team: signed range widths from the team's median, clipped to +-2."""
+    if v is None or r is None:
+        return 0.0
+    mid = r.get("p50", (r["p10"] + r["p90"]) / 2)
+    return float(np.clip((v - mid) / max(1e-3, r["p90"] - r["p10"]), -2.0, 2.0))
+
+
 def _approval_x(parts: dict, style: np.ndarray, ranges: dict, typo: dict | None, typo_ranges: dict,
-                appeal_pct: float, clip_pcs: np.ndarray | None = None, layout: bool = USE_LAYOUT,
-                v8: bool = True) -> np.ndarray:
-    """Approval-model inputs. v8 (default) adds the edge margin and saturates every off-range input at 1 range width:
-    "clearly outside the team's range" counts the same however far out, so one extreme value cannot swamp the rest.
-    layout=False / v8=False rebuild the inputs older models were trained on."""
+                appeal_pct: float, clip_pcs: np.ndarray | None = None, version: int = ARTIFACT_VERSION) -> np.ndarray:
+    """Approval-model inputs for a model trained at `version` (older models get the inputs they were trained on).
+
+    v9: appeal, then every style and typography measurement as (where it sits vs the team, how far outside the team's
+    range). No look-alike / colour-match inputs: those reach the final score through the on-brand blend, and inside
+    the approval model they shift between training (own brief left out) and new designs (see KNOWN_ISSUES).
+    v8: v7 + edge margin, off-range inputs saturated at 1. v7: v6 + layout inputs (capped at 4)."""
     t = typo or {}
-    x = [parts["looks_like"], parts["colour_match"], parts.get("style_match", 0.5)]
-    x += [_off(float(style[i]), ranges[k]) for i, k in enumerate(STYLE_KEYS)]
-    x += [_off(t.get("text_area"), typo_ranges.get("text_area")), _off(t.get("headline"), typo_ranges.get("headline")),
-          _off(finish._weak_share(t), typo_ranges.get("weak_share")),
-          float((finish._headline_contrast(t) or 21.0) < finish.MIN_CONTRAST),
-          appeal_pct]
-    if layout:   # capped: a team with very uniform type has a narrow range, which would make offsets explode
-        x += [min(4.0, _off(t.get(k), typo_ranges.get(k))) for k in finish.LAYOUT_KEYS]
-    if v8:
-        x.append(_off(t.get("edge_margin"), typo_ranges.get("edge_margin")))
-        x[3:] = [min(1.0, v) for v in x[3:]]   # appeal and weak_headline are already 0-1
+    if version >= 9:
+        vals = [float(style[i]) for i in range(len(STYLE_KEYS))]
+        vals += [finish._weak_share(t) if k == "weak_share" else finish._headline_contrast(t) if k == "headline_contrast"
+                 else t.get(k) for k in TYPO_MEASURES]
+        rngs = [ranges.get(k) for k in STYLE_KEYS] + [typo_ranges.get(k) for k in TYPO_MEASURES]
+        x = [appeal_pct]
+        for v, r in zip(vals, rngs):
+            x += [_vs_team(v, r), min(1.0, _off(v, r))]
+    else:
+        x = [parts["looks_like"], parts["colour_match"], parts.get("style_match", 0.5)]
+        x += [_off(float(style[i]), ranges[k]) for i, k in enumerate(STYLE_KEYS)]
+        x += [_off(t.get("text_area"), typo_ranges.get("text_area")), _off(t.get("headline"), typo_ranges.get("headline")),
+              _off(finish._weak_share(t), typo_ranges.get("weak_share")),
+              float((finish._headline_contrast(t) or 21.0) < finish.MIN_CONTRAST),
+              appeal_pct]
+        if version >= 7 and USE_LAYOUT:   # capped: a team with very uniform type has a narrow range
+            x += [min(4.0, _off(t.get(k), typo_ranges.get(k))) for k in finish.LAYOUT_KEYS]
+        if version >= 8:
+            x.append(_off(t.get("edge_margin"), typo_ranges.get("edge_margin")))
+            x[3:] = [min(1.0, v) for v in x[3:]]   # appeal and weak_headline are already 0-1
     if clip_pcs is not None:
         x += list(clip_pcs)
     return np.array(x, np.float32)
@@ -548,6 +574,19 @@ def _approval(d: dict, ob: "_OnBrand", team_rows: np.ndarray, ranges: dict, typo
         X.append(_approval_x(parts, d["style"][i], ranges, d["typo"][i], typo_ranges, ap, _pcs(basis, d["clip"][i])))
         ob_score.append(parts["on_brand"])
     X, ob_score = np.array(X), np.array(ob_score)
+    # The team's published posts were approved too: they join training (never testing) at HISTORY_WEIGHT.
+    hist = [int(r) for r in team_rows if not d["decision"][r]]
+    Xh = np.array([_approval_x({}, d["style"][r], ranges, d["typo"][r], typo_ranges,
+                               float(_ecdf(team_aes, d["aesthetic"][r])[0]) if np.isfinite(d["aesthetic"][r]) and len(team_aes)
+                               else 0.5, _pcs(basis, d["clip"][r])) for r in hist]).reshape(len(hist), X.shape[1])
+
+    def fit(rows):
+        Xf, yf = np.vstack([X[rows], Xh]), np.concatenate([y[rows], np.ones(len(Xh), int)])
+        sw = np.concatenate([np.ones(len(rows)), np.full(len(Xh), HISTORY_WEIGHT)])
+        for c in (0, 1):   # balanced: both classes carry the same total weight
+            sw[yf == c] *= 0.5 * sw.sum() / max(1e-9, sw[yf == c].sum())
+        m = make_pipeline(StandardScaler(), LogisticRegression(C=APPROVAL_C, max_iter=5000))
+        return m.fit(Xf, yf, logisticregression__sample_weight=sw)
 
     def pair_rate(score):  # share of (accepted, rejected) pairs from the SAME project ranked right
         right = total = 0
@@ -569,8 +608,7 @@ def _approval(d: dict, ob: "_OnBrand", team_rows: np.ndarray, ranges: dict, typo
         if y[tr].min() == y[tr].max():
             pred[te] = 0.5
             continue
-        m = make_pipeline(StandardScaler(), LogisticRegression(C=0.3, class_weight="balanced", max_iter=2000))
-        pred[te] = m.fit(X[tr], y[tr]).predict_proba(X[te])[:, 1]
+        pred[te] = fit(tr).predict_proba(X[te])[:, 1]
     auc = float(roc_auc_score(y, pred))
     rng = np.random.default_rng(0)
     boots = []
@@ -587,8 +625,19 @@ def _approval(d: dict, ob: "_OnBrand", team_rows: np.ndarray, ranges: dict, typo
     if why:
         status["why_off"] = why
         return None, status
-    model = make_pipeline(StandardScaler(), LogisticRegression(C=0.3, class_weight="balanced", max_iter=2000)).fit(X, y)
-    w = float(min(MAX_APPROVAL_WEIGHT, 2 * (auc - 0.5)))
+    model = fit(np.arange(len(y)))
+    # Blend weight: the share of approval vs on-brand that best ranks the decided designs, using the approval model's
+    # leave-one-project-out predictions (so a weaker model earns a smaller share). Near-ties (within 0.005) go to the
+    # weight closest to the old fixed rule, min(0.6, 2 * (AUC - 0.5)), so the data moves it only when it has a reason.
+    grid = np.round(np.arange(0.0, MAX_APPROVAL_WEIGHT + 1e-9, 0.1), 1)
+    blend_auc = np.array([roc_auc_score(y, (1 - g) * ob_score + g * pred) for g in grid])
+    prior = min(0.6, 2 * (auc - 0.5))
+    near = grid[blend_auc >= blend_auc.max() - 0.005]
+    w = float(near[np.argmin(np.abs(near - prior))])
+    status["blend_auc"] = round(float(max(blend_auc)), 3)
+    if w == 0:
+        status["why_off"] = "adds nothing over the on-brand score on these designs (best blend gives it no weight)"
+        return None, status
     coefs = model[-1].coef_[0]
     status.update({"on": True, "weight": round(w, 3),
                    "top_inputs": [{"input": APPROVAL_INPUTS[j], "coef": round(float(coefs[j]), 3)}
@@ -846,7 +895,7 @@ def score(team_id: int, images: list[Image.Image], description: str = "", kind: 
         if appr is not None:
             x = _approval_x(parts, plan_style, art["ranges"], typo, art.get("typo_ranges", {}),
                             appeal["percentile"] if appeal else 0.5, _pcs(appr.get("basis"), plan_vec),
-                            layout=USE_LAYOUT and art.get("version", 0) >= 7, v8=art.get("version", 0) >= 8)
+                            version=art.get("version", 0))
             p_ok = float(appr["model"].predict_proba(x[None])[0, 1])
             out["components"]["approval"] = round(p_ok, 3)
             out["weights"]["approval"] = round(appr["weight"], 3)

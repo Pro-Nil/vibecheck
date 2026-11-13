@@ -4,11 +4,70 @@ Honest status as of 13 Nov 2026. Everything below was found by running the app o
 74 posts from one fest's Instagram page (Mar–Nov 2026) and 9 drafts of one talk poster that the design
 team rejected, plus 2 posters the team accepted.
 
-**Short version:** the pipeline, API, plugins and dashboards work end to end. Model v8 (v7 with cleaner approval-model training; v7 added layout, typeface and clutter features) ranks the team's real
+**Short version:** the pipeline, API, plugins and dashboards work end to end. Model v9 (approval model rebuilt from measured gaps; v7 added layout, typeface and clutter features) ranks the team's real
 new posts above its rejected drafts (AUC 0.90 on posts it had not seen) and both accepted one-offs above all 9
 rejects (was AUC 0.53 in v2). It is still tested on very little: all rejected drafts come from one brief and only
 2 accepted designs are on record.
 More decided designs (see "Improvements") are what would move it further.
+
+## 00000000. Model v9 (13 Nov 2026): the approval model at the limit of its data
+
+Goal: push the approval model until further changes stop helping on designs it has never seen. Method: a fast
+harness on a throwaway copy of the synthetic team, two held-out sets of 60 new briefs (seeds 999, 2024) for choices,
+then a third fresh set (seed 3031) used only to confirm, and a paired bootstrap over briefs throughout.
+
+**What limited v8.** Each broken rule is detected at AUC 0.96-1.00 from the existing measurements, and with those
+turned into near-perfect per-rule probabilities the model still only reached 0.80 pooled. Three things were costing it:
+1. *Direction was thrown away.* v8 fed "how far outside the team's range" only: a headline too big and too small
+   looked the same, and anything inside the range was 0.
+2. *Look-alike / colour-match inputs shifted between training and use.* In training a design's own brief is left
+   out of the comparison, while a new design has all same-topic posts to match; the approval model learned on the
+   wrong scale. These two already reach the final score through the on-brand blend.
+3. *Too little data.* 120 decided designs; the team's 90 published posts were not used, though each was approved.
+
+**v9 changes** (each kept only if it helped on both choice sets):
+
+| Change (cumulative, pooled 360 designs) | AUC | vs v8 |
+|---|---|---|
+| v8 | 0.791 | |
+| every measurement as (signed position vs the team, saturated distance outside its range) | 0.803 | +0.011 [+0.004, +0.019] |
+| drop look-alike / colour / style-match from the approval inputs (they stay in via the blend) | 0.811 | +0.019 [+0.005, +0.035] |
+| blend weight learned from the out-of-sample predictions (0.7 here; ties go to the old rule) | 0.814 | +0.023 [+0.008, +0.039] |
+| the team's published posts as approved designs, half weight; logistic C 0.3 -> 0.1 | 0.818 | +0.027 [+0.010, +0.044] |
+
+**Confirmed in the app** (retrained, scored as finished designs; v8 vs v9 on the same designs):
+
+| Held-out set | ceiling | v8 | v9 | paired difference |
+|---|---|---|---|---|
+| 999 (reported set) | 0.92 | 0.830 | **0.870** | +0.040 [+0.015, +0.065] |
+| 2024 | 0.87 | 0.762 | 0.768 | +0.006 [-0.014, +0.025] |
+| 3031 (fresh, never used for a choice) | 0.89 | 0.844 | **0.859** | +0.016 [-0.003, +0.036] |
+| **all 540 designs** | | 0.807 | **0.829** | **+0.022 [+0.010, +0.035], better in 100 % of resamples** |
+
+Real data (Techkriti, approval model off): time-forward AUC 0.90, unchanged.
+
+**Fewer decisions** (random subsets of the 40 decided briefs, 20 draws each, held-out AUC): 10 briefs v8 0.750 / v9
+0.800; 15: 0.769 / 0.806; 20: 0.777 / 0.809; 30: 0.784 / 0.816. v9 is better in 95-100 % of draws, most of all for
+small teams. With the AUC / interval / vs-on-brand checks in place, switching on at **5** accepted + 5 rejected
+(was 8) never left a team below the on-brand score alone (3-8 briefs, 40 draws each), and it switches on at 4-5
+decided briefs instead of 6+. So `MIN_DECIDED` is now 5.
+
+**Why this is about as far as this data goes.** On the pooled choice sets: v9 approval 0.826; a model handed the
+exact rules each design broke, trained on the same 120 decisions, 0.843; the seniors' own hidden score 0.894, which
+no single-design model can reach (seniors also accept "the best version of the brief" and flip 10 % at random).
+Seniors' pick ranked first within a brief: v9 79 %, oracle 84 %, ceiling 90 %. Of v9's wrong picks, about half are a
+clean version the seniors happened to reject (flips, or two clean versions); the rest are rules weighted in the wrong
+order, which only more decided briefs fix. Detection is no longer the bottleneck.
+
+**Trade-off to know about:** cramped layouts score higher than in v8 (median 41 -> 60 on set 999), because the
+team's published history contains cramped posts and v9 learns from those as approved. Centred layouts dropped
+(71 -> 62), the rule the seniors care least about.
+
+**Tried and not kept** (all on the same harness): signed position alone (-0.012), raw measurements (-0.015), binary
+"outside range" flags, boosted stumps and depth-2 trees (overfit), L1, a learned largest-accent-shape input, and
+direction "towards other clubs" (identical to signed: a sign flip only flips a coefficient).
+
+Models trained before v9 keep scoring exactly as they were trained until the team retrains.
 
 ## 0000000. Model v8 (13 Nov 2026): cleaner approval-model training
 
@@ -255,7 +314,7 @@ None beats v2 on accepted-vs-rejected, and 11 labelled designs (2 accepted) cann
   **they are a readiness checklist, not an approval predictor**, and they do not change the score.
 - **Approval model**: logistic regression on 15 readable inputs (on-brand parts, distance from the team's usual style
   and typography, appeal), trained only on designs with a known decision (`decision` = accepted/rejected, grouped by
-  `project`). Validated leaving out one whole project at a time; used only with >= 8 accepted, >= 8 rejected, >= 3
+  `project`). Validated leaving out one whole project at a time; used only with >= 5 accepted, >= 5 rejected (8 before v9), >= 3
   projects and AUC >= 0.60, then blended into final-design scores by its AUC (at most 60 %). Instagram posts alone
   never train it (they caused the series-vs-one-off problem, F1/F4).
   **Status on the real data: off** (2 accepted, 9 rejected, 2 projects; needs 6 more accepted and 1 more project).

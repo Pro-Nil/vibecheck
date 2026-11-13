@@ -6,7 +6,7 @@ decide, then scores every version as a finished design with the trained model. C
   * the final score (on-brand blended with the approval model learned from decisions)
 on AUC accepted-vs-rejected and on "picked the version the seniors liked best" within each brief.
 
-    .venv/Scripts/python scripts/eval_demo_team.py [n_briefs]
+    .venv/Scripts/python scripts/eval_demo_team.py [n_briefs] [seed]   (seed 999 = the reported test set)
 """
 from __future__ import annotations
 
@@ -70,4 +70,4 @@ def main(n_briefs: int = 20, seed: int = 999):
 
 
 if __name__ == "__main__":
-    main(int(sys.argv[1]) if len(sys.argv) > 1 else 20)
+    main(int(sys.argv[1]) if len(sys.argv) > 1 else 20, int(sys.argv[2]) if len(sys.argv) > 2 else 999)

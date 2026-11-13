@@ -264,7 +264,7 @@ def test_approval_model_needs_decisions_then_turns_on(client):
     files = [("files", (f"t{i}.png", png(team_style_image(2000 + i)), "image/png")) for i in range(30)]
     wait(client, client.post(f"/teams/{tid}/import/upload", files=files, data={"label": "team"}).json()["job_id"])
     ap = client.get(f"/teams/{tid}/model").json()["current"]["metrics"]["approval"]
-    assert ap["on"] is False and ap["needs"]["accepted"] == 8
+    assert ap["on"] is False and ap["needs"]["accepted"] == 5
     for k, proj in enumerate(["a", "b", "c"]):  # 3 briefs, accepted = team style, rejected = off style
         acc = [("files", (f"a{k}{i}.png", png(team_style_image(3000 + 10 * k + i)), "image/png")) for i in range(4)]
         rej = [("files", (f"r{k}{i}.png", png(other(3000 + 10 * k + i)), "image/png")) for i in range(4)]
@@ -273,7 +273,7 @@ def test_approval_model_needs_decisions_then_turns_on(client):
         wait(client, j["job_id"])
     ap = client.get(f"/teams/{tid}/model").json()["current"]["metrics"]["approval"]
     assert ap["n_accepted"] == 12 and ap["n_rejected"] == 12 and ap["n_projects"] == 3
-    assert ap["on"] is True and ap["auc"] >= 0.8 and 0 < ap["weight"] <= 0.6
+    assert ap["on"] is True and ap["auc"] >= 0.8 and 0 < ap["weight"] <= 0.8
     final = client.post(f"/teams/{tid}/checks", data={"kind": "final"},
                         files=[("images", ("f.png", png(team_style_image(4000)), "image/png"))]).json()
     assert "approval" in final["components"] and final["weights"]["approval"] == ap["weight"]
