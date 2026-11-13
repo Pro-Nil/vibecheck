@@ -11,6 +11,8 @@ FDE1 course project (IIT Kanpur, 2026-27).
 > `scripts/evaluate.py`) and both accepted designs above all 9 rejected drafts (only 2 accepted, 9 rejected, 2 briefs:
 > encouraging, not proven). The approval model switches itself on once enough decided designs are recorded.
 > See [KNOWN_ISSUES.md](KNOWN_ISSUES.md) for everything that fails, the evidence, and what to improve.
+> [docs/HOW_IT_WORKS.md](docs/HOW_IT_WORKS.md) explains every pipeline, algorithm, library and evaluation number, with a
+> bank of likely questions and answers.
 
 ## Two checks
 
