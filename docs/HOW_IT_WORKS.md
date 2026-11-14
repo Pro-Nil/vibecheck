@@ -14,7 +14,12 @@ was made. Written against the code at model **v9** (13 Nov 2026). File reference
 A design team (a club or fest team that posts on Instagram) has a house style that new designers have to absorb by
 trial and error: they make a poster, seniors reject it, they try again. **VibeCheck learns the team's style from its
 own posts and tells a designer how well an idea or a finished poster fits it, with reasons**, before seniors spend
-time on it. Two checks:
+time on it.
+
+**Seniors:** the team members who review and approve designs before they are posted. In a company this would be the
+brand or design lead.
+
+Two checks:
 
 | Check | Input | Output |
 |---|---|---|
@@ -818,6 +823,7 @@ design, so it should be read as "new for this team", not "bad".
 | Kernel smoothing, Silverman bandwidth | replacing each reference value by a small bell curve so percentiles are smooth; the standard rule for its width |
 | Probit | the inverse of the normal CDF; turns a percentile into a z-score |
 | One-class scorer | a scorer learned from positive examples only |
+| Seniors | the team members who review and approve designs before they are posted (in a company: the brand or design lead) |
 | Near-twin | another team post more than 0.90 similar (same series) |
 | Near-miss | a deliberately broken copy of a team post |
 | Logistic regression | a linear model that outputs a probability; C sets how strongly it is regularised (small C = simpler) |
